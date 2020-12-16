@@ -355,14 +355,17 @@ module DiaryProc =
                 System.DateTime((y * 1<_>), (mo * 1<_>), (d * 1<_>), (h * 1<_>), (m * 1<_>), 0), n)
 
 
-        let filter () =
+        let filter patt =
             xs
             |> Seq.filter (fun (_, note) ->
-                System.Text.RegularExpressions.Regex.IsMatch(note, "собес")
+                System.Text.RegularExpressions.Regex.IsMatch(note, patt, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
                 )
             |> Seq.map (sprintf "%A")
-            |> fun cont -> System.IO.File.WriteAllLines ("output\\output.txt", cont)
-
+            |> fun cont ->
+                if Seq.isEmpty cont then
+                    failwithf "'%s' not found" patt
+                System.IO.File.WriteAllLines ("output\\output.txt", cont)
+        // filter "долина"
         let last x =
             xs
             |> Seq.tryFindBack (fun (_, note) ->
@@ -419,14 +422,17 @@ let toNewWorldOrder notesDir notesPath =
 
 
 let getShortDscr (note:Note) =
-    let dscr = note.Text.Replace("\n", "\\n")
+    let dscr =
+        note.Text.Replace("\n", "\\n")
+                 .Replace("[","\\[")
+                 .Replace("]","\\]")
     let length = 100
     if dscr.Length < length then
         dscr
     else
         sprintf "%s..." dscr.[..length - 1]
 
-let createTagsMap notesDir =
+let createTagsMap pred notesDir =
     let notesPaths = System.IO.Directory.EnumerateFiles notesDir
 
     let tagNotes =
@@ -438,13 +444,17 @@ let createTagsMap notesDir =
         |> Seq.seqEither
         |> Either.map (fun notes ->
             notes
+            |> List.filter pred
             |> List.fold (fun st (notePath, note) ->
                 let shortDscr = getShortDscr note
-                note.Tags
-                |> List.fold (fun st tag ->
-                    st
-                    |> Map.addOrMod tag [notePath, shortDscr] (fun x -> (notePath, shortDscr)::x)
-                ) st
+                let fn st tags =
+                    tags
+                    |> List.fold (fun st tag ->
+                        let x = notePath, shortDscr
+                        st
+                        |> Map.addOrMod tag [x] (fun xs -> x::xs)
+                    ) st
+                fn st note.Tags
             ) Map.empty
         )
     tagNotes
@@ -462,30 +472,32 @@ let createTagsMap notesDir =
     )
 
 let withoutTags notesDir =
-    let notesPaths = System.IO.Directory.EnumerateFiles notesDir
+    let notesFilterBy chooser notesDir =
+        let notesPaths = System.IO.Directory.EnumerateFiles notesDir
 
-    let tagNotes =
-        notesPaths
-        |> Seq.map (fun notePath ->
-            parseNoteOnFile notePath
-            |> Either.map (fun note -> notePath, note)
-        )
-        |> Seq.seqEither
-        |> Either.map (fun notes ->
-            notes
-            |> List.choose (fun (notePath, note) ->
-                if List.isEmpty note.Tags then
-                    Some(notePath, getShortDscr note)
-                else None
+        let tagNotes =
+            notesPaths
+            |> Seq.map (fun notePath ->
+                parseNoteOnFile notePath
+                |> Either.map (fun note -> notePath, note)
             )
+            |> Seq.seqEither
+            |> Either.map (fun notes ->
+                notes
+                |> List.choose (chooser)
+            )
+        tagNotes
+        |> Either.map (
+            List.map (fun (notePath, noteShortDscr) ->
+                let noteUri = System.Uri notePath |> fun x -> x.AbsoluteUri
+                sprintf "* [%s](%s)" noteShortDscr noteUri)
+            >> String.concat "\n"
         )
-    tagNotes
-    |> Either.map (
-        List.map (fun (notePath, noteShortDscr) ->
-            let noteUri = System.Uri notePath |> fun x -> x.AbsoluteUri
-            sprintf "* [%s](%s)" noteShortDscr noteUri)
-        >> String.concat "\n"
-    )
+    notesDir
+    |> notesFilterBy (fun (notePath, note) ->
+        if List.isEmpty note.Tags then
+            Some(notePath, getShortDscr note)
+        else None)
 
 let modifyNotes fn notesPath =
     let notes = startOnFile notesPath
