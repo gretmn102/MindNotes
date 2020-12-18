@@ -9,18 +9,33 @@ type Deferred<'t> =
     | InProgress
     | Resolved of 't
 
+type SavingState =
+    | NotSaved
+    | Saved
+    | SavingInProgress
+    | SavingError of string
+type NotePageMode =
+    | ViewMode
+    | EditMode of {| FullNoteTemp: FullNote; SetFullNoteResult: SavingState |}
+
+type NotePageState =
+    {
+        FullNote : FullNote
+        Mode : NotePageMode
+    }
+
 type SearchState =
     {
         SearchResult: Result<(string * MindNotes.Api.Note) list,string> Deferred
-        Input: string
+        SearchPattern: string
     }
     static member Empty =
         {
             SearchResult = HasNotStartedYet
-            Input = ""
+            SearchPattern = ""
         }
 type Page =
-    | NotePage of Result<FullNote,string> Deferred
+    | NotePage of Result<NotePageState,string> Deferred
     | SearchPage of SearchState
 type State =
     {
@@ -28,16 +43,23 @@ type State =
     }
 
 type SearchMsg =
-    | SetInput of string
+    | ChangeSearchPattern of string
     | Search
-    | SearchResultChange of Result<(string * MindNotes.Api.Note) list,string>
+    | SearchResult of Result<(string * MindNotes.Api.Note) list,string>
 type NoteId = string
 type NoteMsg =
-    | SetNote of Result<FullNote,string>
+    /// А сам `GetNote` воплощается через Router
+    | GetNoteResult of Result<FullNote,string>
+    | SetNote
+    | SetNoteResult of Result<FullNote, string>
+
+    | ChangeNotePageMode of NotePageMode
+    // /// Допустимо только в режиме редактирования
+    // | ChangeSavingState of SavingState
 type Msg =
     | SearchMsg of SearchMsg
     | NoteMsg of NoteMsg
-    | UrlChange of string list
+    | ChangeUrl of string list
 
 let todosApi =
     Remoting.createApi()
@@ -55,7 +77,7 @@ let parseUrl state segments =
             | _ -> SearchState.Empty
         { state with CurrentPage = SearchPage searchState}, Cmd.none
     | "notes"::noteId::_ ->
-        let cmd = Cmd.OfAsync.perform todosApi.getNote noteId (SetNote >> NoteMsg)
+        let cmd = Cmd.OfAsync.perform todosApi.getNote noteId (GetNoteResult >> NoteMsg)
         { state with CurrentPage = NotePage InProgress }, cmd
     | _ ->
         state, Cmd.none
@@ -75,26 +97,26 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         match state.CurrentPage with
         | SearchPage searchPageState ->
             match x with
-            | SetInput value ->
+            | ChangeSearchPattern value ->
                 let state =
                     { state with
                         CurrentPage =
-                            SearchPage { searchPageState with Input = value }}
+                            SearchPage { searchPageState with SearchPattern = value }}
                 state, Cmd.none
             | Search ->
-                let todo = Todo.create searchPageState.Input
-                let cmd = Cmd.OfAsync.perform todosApi.notesFilterByPattern todo.Description (SearchResultChange >> SearchMsg)
+                let todo = Todo.create searchPageState.SearchPattern
+                let cmd = Cmd.OfAsync.perform todosApi.notesFilterByPattern todo.Description (SearchResult >> SearchMsg)
                 let state =
                     { state with
                         CurrentPage =
                             SearchPage
                                 { searchPageState with
-                                    Input = ""
+                                    SearchPattern = ""
                                     SearchResult = InProgress
                                 }
                     }
                 state, cmd
-            | SearchResultChange searchResult ->
+            | SearchResult searchResult ->
                 let state =
                     { state with
                         CurrentPage =
@@ -103,12 +125,114 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                     SearchResult = Resolved searchResult }}
                 state, Cmd.none
         | x -> failwithf "expected SearchPage, but %A" x
-    | UrlChange segments ->
+    | ChangeUrl segments ->
         parseUrl state segments
     | NoteMsg x ->
         match x with
-        | SetNote x ->
+        | GetNoteResult x ->
+            let x =
+                x
+                |> Result.map (fun fullNote ->
+                    {
+                        FullNote = fullNote
+                        Mode = ViewMode
+                    }
+                )
             { state with CurrentPage = NotePage (Resolved x)}, Cmd.none
+        | SetNote ->
+            let st, cmd =
+                match state.CurrentPage with
+                | NotePage st ->
+                    match st with
+                    | Resolved st ->
+                        let st, cmd =
+                            match st with
+                            | Ok notePageState ->
+                               match notePageState.Mode with
+                               | EditMode x ->
+                                   let st =
+                                        { notePageState with
+                                            Mode =
+                                                EditMode {| x with SetFullNoteResult = SavingInProgress |} }
+
+                                   let cmd = Cmd.OfAsync.perform todosApi.setNote x.FullNoteTemp (SetNoteResult >> NoteMsg)
+                                   Resolved(Ok st), cmd
+                               | ViewMode -> failwith "Not Implemented"
+                            | Error(errorValue) -> failwith "Not Implemented"
+                        NotePage st, cmd
+                    | HasNotStartedYet
+                    | InProgress -> failwith "Not Implemented"
+                | SearchPage(_) -> failwith "Not Implemented"
+            let state =
+                { state with
+                    CurrentPage = st }
+            state, cmd
+        | SetNoteResult res ->
+            let st, cmd =
+                match state.CurrentPage with
+                | NotePage st ->
+                    match st with
+                    | Resolved st ->
+                        let st, cmd =
+                            match st with
+                            | Ok notePageState ->
+                               match notePageState.Mode with
+                               | EditMode x ->
+                                   let st =
+                                        match res with
+                                        | Error msg ->
+                                            { notePageState with
+                                                Mode =
+                                                    {| x with
+                                                        SetFullNoteResult = SavingError msg |}
+                                                    |> EditMode
+                                            }
+                                        | Ok fullNote ->
+                                            { notePageState with
+                                                FullNote = fullNote
+                                                Mode =
+                                                    {|
+                                                        FullNoteTemp = fullNote
+                                                        SetFullNoteResult = Saved
+                                                    |}
+                                                    |> EditMode
+                                            }
+                                   let cmd = Cmd.none
+                                   Resolved(Ok st), cmd
+                               | ViewMode -> failwith "Not Implemented"
+                            | Error(errorValue) -> failwith "Not Implemented"
+                        NotePage st, cmd
+                    | HasNotStartedYet
+                    | InProgress -> failwith "Not Implemented"
+                | SearchPage(_) -> failwith "Not Implemented"
+            let state =
+                { state with
+                    CurrentPage = st }
+            state, cmd
+        | ChangeNotePageMode mode ->
+            let st, cmd =
+                match state.CurrentPage with
+                | NotePage st ->
+                    match st with
+                    | Resolved st ->
+                        let st, cmd =
+                            match st with
+                            | Ok notePageState ->
+                               let st =
+                                    { notePageState with
+                                        Mode = mode
+                                    }
+                               let cmd = Cmd.none
+                               Resolved(Ok st), cmd
+                            | Error(errorValue) -> failwith "Not Implemented"
+                        NotePage st, cmd
+                    | HasNotStartedYet
+                    | InProgress -> failwith "Not Implemented"
+                | SearchPage(_) -> failwith "Not Implemented"
+            let state =
+                { state with
+                    CurrentPage = st }
+            state, cmd
 
 open Fable.React
 open Fable.React.Props
@@ -133,14 +257,14 @@ let containerBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
         Field.div [ Field.IsGrouped ] [
             Control.p [ Control.IsExpanded ] [
                 Input.text [
-                  Input.Value searchState.Input
-                  Input.Placeholder "Find"
-                  Input.OnChange (fun x -> SetInput x.Value |> dispatch) ]
+                    Input.Value searchState.SearchPattern
+                    Input.Placeholder "Find"
+                    Input.OnChange (fun x -> ChangeSearchPattern x.Value |> dispatch) ]
             ]
             Control.p [ ] [
                 Button.a [
                     Button.Color IsPrimary
-                    let disabled = System.String.IsNullOrWhiteSpace searchState.Input
+                    let disabled = System.String.IsNullOrWhiteSpace searchState.SearchPattern
                     Button.Disabled disabled
                     if disabled then ()
                     else
@@ -244,21 +368,100 @@ let view (state : State) (dispatch : Msg -> unit) =
                     | Resolved res ->
                         match res with
                         | Ok note ->
-                            Content.content [] [
-                                p [] [str "notes"]
+                            Container.container [] [
                                 Button.a [
                                     Button.Props [ Href (Router.format "") ]
                                 ] [
                                     str "Search"
                                 ]
+                                match note.Mode with
+                                | ViewMode ->
+                                    Button.button
+                                        [
+                                            Button.OnClick (fun _ ->
+                                                {|
+                                                    FullNoteTemp = note.FullNote
+                                                    SetFullNoteResult = Saved
+                                                |}
+                                                |> EditMode
+                                                |> ChangeNotePageMode
+                                                |> NoteMsg
+                                                |> dispatch
+                                            )
+                                        ]
+                                        [ Fa.i [ Fa.Solid.Edit ] [] ]
+                                    Content.content [] [
+                                        div [ DangerouslySetInnerHTML { __html = note.FullNote.Html } ] []
+                                    ]
+                                | EditMode x ->
+                                    Textarea.textarea
+                                        [ Textarea.DefaultValue x.FullNoteTemp.Note.Text
+                                          Textarea.Size IsLarge
+                                          Textarea.OnChange (fun x ->
+                                            {|
+                                                FullNoteTemp =
+                                                    { note.FullNote with
+                                                        Note = { note.FullNote.Note
+                                                                    with Text = x.Value }}
+                                                SetFullNoteResult = NotSaved
+                                            |}
+                                            |> EditMode
+                                            |> ChangeNotePageMode
+                                            |> NoteMsg
+                                            |> dispatch
+                                          )
+                                        ] []
+                                    match x.SetFullNoteResult with
+                                    | NotSaved ->
+                                        Button.button
+                                            [
+                                                Button.OnClick (fun _ ->
+                                                    SetNote
+                                                    |> NoteMsg
+                                                    |> dispatch
+                                                )
+                                            ]
+                                            [ str "Save" ]
+                                    | Saved ->
+                                        Button.button
+                                            [
+                                                Button.Disabled true
+                                            ]
+                                            [ str "Saved" ]
+                                    | SavingInProgress ->
+                                        Button.button
+                                            [
+                                                Button.IsLoading true
+                                            ]
+                                            []
+                                    | SavingError errMsg ->
+                                        Button.button
+                                            [
+                                                Button.Color IsDanger
+                                                Button.OnClick (fun _ ->
+                                                    SetNote
+                                                    |> NoteMsg
+                                                    |> dispatch
+                                                )
+                                            ]
+                                            [ str errMsg ]
 
-                                div [ DangerouslySetInnerHTML { __html = note.Html } ] []
+                                    Button.button
+                                        [
+                                            Button.OnClick (fun _ ->
+                                                ViewMode
+                                                |> ChangeNotePageMode
+                                                |> NoteMsg
+                                                |> dispatch
+                                            )
+                                        ]
+                                        [ str "Cancel" ]
                             ]
                         | Error errMsg ->
                             p [] [str errMsg]
                     | HasNotStartedYet -> p [] [str "HasNotStartedYet"]
             Feliz.React.router [
-                router.onUrlChanged (UrlChange >> dispatch)
+                router.onUrlChanged (ChangeUrl >> dispatch)
                 router.children [ activePage ]
             ]
         ]

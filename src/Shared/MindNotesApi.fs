@@ -5,7 +5,7 @@ type Note = { DateTime:System.DateTime option; Tags:string list; Text:string }
 let notePrint (x:Note) =
     let datetime =
         x.DateTime
-        |> Option.map (fun x -> x.ToString() |> sprintf "%s\n")
+        |> Option.map (fun x -> x.ToString("dd.MM.yyyy HH:mm:ss") |> sprintf "%s\n")
         |> Option.defaultValue ""
     let tags =
         match x.Tags with

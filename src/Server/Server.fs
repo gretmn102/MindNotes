@@ -50,10 +50,22 @@ let getNote id =
         }
     )
     |> Result.ofEither
+let setNote (fullNote:FullNote) =
+    try
+        use fileWriter = System.IO.File.OpenWrite fullNote.Path
+        let str = MindNotes.Api.notePrint fullNote.Note
+        let bytes = System.Text.UTF8Encoding.UTF8.GetBytes str
+
+        use m = new System.IO.MemoryStream(bytes)
+        m.WriteTo fileWriter
+        { fullNote with Html = MarkdownConverter.toMarkdown fullNote.Note.Text}
+        |> Ok
+    with e -> Error e.Message
 let api =
     {
         notesFilterByPattern = fun pattern -> async { return notesFilterByPattern pattern }
         getNote = fun id -> async { return getNote id }
+        setNote = fun fullNote -> async { return setNote fullNote }
     }
 
 let webApp =
