@@ -262,7 +262,7 @@ let navBrand =
 
 let containerBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
     Box.box' [ ] [
-        Field.div [ Field.IsGrouped ] [
+        Field.div [ Field.HasAddons ] [
             Control.p [ Control.IsExpanded ] [
                 Input.text [
                     Input.Value searchState.SearchPattern
@@ -271,14 +271,12 @@ let containerBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
             ]
             Control.p [ ] [
                 Button.a [
-                    Button.Color IsPrimary
                     let disabled = System.String.IsNullOrWhiteSpace searchState.SearchPattern
                     Button.Disabled disabled
-                    if disabled then ()
-                    else
+                    if not disabled then
                         Button.OnClick (fun _ -> dispatch Search)
                 ] [
-                    str "Add"
+                    Fa.i [ Fa.Solid.Search ] []
                 ]
             ]
         ]
@@ -382,20 +380,24 @@ let view (state : State) (dispatch : Msg -> unit) =
                                 ] [
                                     str "Search"
                                 ]
-                                div [ ClassName "block" ] [
-                                    span [ ] [str note.FullNote.Path]
+                                Field.div [Field.HasAddons] [
+                                    Control.p [] [
+                                        Button.button [ Button.IsStatic true; Button.Color IsBlack ] [str note.FullNote.Path]
+                                    ]
                                     match Browser.Navigator.navigator.clipboard with
                                     | Some clipboard ->
-                                        Button.span [
-                                            Button.OnClick (fun _ ->
-                                                clipboard.writeText note.FullNote.Path
-                                                |> ignore
-                                            )
-                                        ] [
-                                        Fa.span [ Fa.Solid.Clipboard
-                                                  Fa.FixedWidth
-                                                ]
-                                            [ ]
+                                        Control.p [] [
+                                            Button.button [
+                                                Button.OnClick (fun _ ->
+                                                    clipboard.writeText note.FullNote.Path
+                                                    |> ignore
+                                                )
+                                            ] [
+                                                Fa.span [ Fa.Solid.Clipboard
+                                                          Fa.FixedWidth
+                                                        ]
+                                                    [ ]
+                                            ]
                                         ]
                                     | None -> ()
                                 ]
