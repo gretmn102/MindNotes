@@ -198,6 +198,8 @@ NUGET
       System.Reflection.Emit.Lightweight (>= 4.3)
       System.Threading.Tasks.Extensions (>= 4.4)
       System.ValueTuple (>= 4.4)
+    Zanaptak.TypedCssClasses (0.4)
+      FSharp.Core (>= 4.3.4)
 GIT
   remote: https://github.com/gretmn102/FsharpMyExtension.git
      (afae9328f846d67545a142708c4e11055ce6ac8b)

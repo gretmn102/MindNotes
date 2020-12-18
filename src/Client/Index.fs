@@ -14,9 +14,15 @@ type SavingState =
     | Saved
     | SavingInProgress
     | SavingError of string
+type EditModeState =
+    {
+        FullNoteTemp: FullNote
+        SetFullNoteResult: SavingState
+        InputTagsState: InputTags.State
+    }
 type NotePageMode =
     | ViewMode
-    | EditMode of {| FullNoteTemp: FullNote; SetFullNoteResult: SavingState |}
+    | EditMode of EditModeState
 
 type NotePageState =
     {
@@ -155,7 +161,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                    let st =
                                         { notePageState with
                                             Mode =
-                                                EditMode {| x with SetFullNoteResult = SavingInProgress |} }
+                                                EditMode { x with SetFullNoteResult = SavingInProgress } }
 
                                    let cmd = Cmd.OfAsync.perform todosApi.setNote x.FullNoteTemp (SetNoteResult >> NoteMsg)
                                    Resolved(Ok st), cmd
@@ -185,18 +191,18 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                         | Error msg ->
                                             { notePageState with
                                                 Mode =
-                                                    {| x with
-                                                        SetFullNoteResult = SavingError msg |}
+                                                    { x with
+                                                        SetFullNoteResult = SavingError msg }
                                                     |> EditMode
                                             }
                                         | Ok fullNote ->
                                             { notePageState with
                                                 FullNote = fullNote
                                                 Mode =
-                                                    {|
+                                                    { x with
                                                         FullNoteTemp = fullNote
                                                         SetFullNoteResult = Saved
-                                                    |}
+                                                    }
                                                     |> EditMode
                                             }
                                    let cmd = Cmd.none
@@ -376,15 +382,37 @@ let view (state : State) (dispatch : Msg -> unit) =
                                 ] [
                                     str "Search"
                                 ]
+                                div [ ClassName "block" ] [
+                                    span [ ] [str note.FullNote.Path]
+                                    match Browser.Navigator.navigator.clipboard with
+                                    | Some clipboard ->
+                                        Button.span [
+                                            Button.OnClick (fun _ ->
+                                                clipboard.writeText note.FullNote.Path
+                                                |> ignore
+                                            )
+                                        ] [
+                                        Fa.span [ Fa.Solid.Clipboard
+                                                  Fa.FixedWidth
+                                                ]
+                                            [ ]
+                                        ]
+                                    | None -> ()
+                                ]
+
                                 match note.Mode with
                                 | ViewMode ->
+                                    note.FullNote.Note.Tags |> List.map (fun x -> Tag.tag [] [str x])
+                                    |> Tag.list []
+
                                     Button.button
                                         [
                                             Button.OnClick (fun _ ->
-                                                {|
+                                                {
                                                     FullNoteTemp = note.FullNote
                                                     SetFullNoteResult = Saved
-                                                |}
+                                                    InputTagsState = InputTags.State.Empty
+                                                }
                                                 |> EditMode
                                                 |> ChangeNotePageMode
                                                 |> NoteMsg
@@ -395,25 +423,80 @@ let view (state : State) (dispatch : Msg -> unit) =
                                     Content.content [] [
                                         div [ DangerouslySetInnerHTML { __html = note.FullNote.Html } ] []
                                     ]
-                                | EditMode x ->
+                                | EditMode editModeState ->
+                                    editModeState.FullNoteTemp.Note.Tags
+                                    |> InputTags.inputTags
+                                        "inputTagsId"
+                                        (fun tag ->
+                                            { editModeState with
+                                                FullNoteTemp =
+                                                    { editModeState.FullNoteTemp with
+                                                        Note =
+                                                            { editModeState.FullNoteTemp.Note with
+                                                                Tags =
+                                                                    editModeState.FullNoteTemp.Note.Tags
+                                                                    |> List.filter ((<>) tag) }}
+                                                SetFullNoteResult = NotSaved
+                                            }
+                                            |> EditMode
+                                            |> ChangeNotePageMode
+                                            |> NoteMsg
+                                            |> dispatch
+                                        )
+                                        (fun st ->
+                                            { editModeState with
+                                                InputTagsState = st
+                                            }
+                                            |> EditMode
+                                            |> ChangeNotePageMode
+                                            |> NoteMsg
+                                            |> dispatch
+                                        )
+                                        (fun f ->
+                                            let st, tag = f editModeState.InputTagsState
+
+                                            { editModeState with
+                                                InputTagsState = st
+                                                FullNoteTemp =
+                                                    { editModeState.FullNoteTemp with
+                                                        Note =
+                                                            { editModeState.FullNoteTemp.Note with
+                                                                Tags =
+                                                                    List.foldBack
+                                                                        (fun x st ->
+                                                                            if x = tag then st
+                                                                            else x::st
+                                                                        )
+                                                                        editModeState.FullNoteTemp.Note.Tags
+                                                                        [tag]
+                                                            }
+                                                    }
+                                                SetFullNoteResult = NotSaved
+                                            }
+                                            |> EditMode
+                                            |> ChangeNotePageMode
+                                            |> NoteMsg
+                                            |> dispatch
+                                        )
+
                                     Textarea.textarea
-                                        [ Textarea.DefaultValue x.FullNoteTemp.Note.Text
+                                        [ Textarea.DefaultValue editModeState.FullNoteTemp.Note.Text
                                           Textarea.Size IsLarge
                                           Textarea.OnChange (fun x ->
-                                            {|
+                                            { editModeState with
                                                 FullNoteTemp =
-                                                    { note.FullNote with
-                                                        Note = { note.FullNote.Note
+                                                    { editModeState.FullNoteTemp with
+                                                        Note = { editModeState.FullNoteTemp.Note
                                                                     with Text = x.Value }}
                                                 SetFullNoteResult = NotSaved
-                                            |}
+                                            }
                                             |> EditMode
                                             |> ChangeNotePageMode
                                             |> NoteMsg
                                             |> dispatch
                                           )
                                         ] []
-                                    match x.SetFullNoteResult with
+                                    match editModeState.SetFullNoteResult with
                                     | NotSaved ->
                                         Button.button
                                             [
@@ -457,7 +540,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                 |> dispatch
                                             )
                                         ]
-                                        [ str "Cancel" ]
+                                        [ str "Close" ]
                             ]
                         | Error errMsg ->
                             p [] [str errMsg]
