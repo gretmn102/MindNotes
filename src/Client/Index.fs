@@ -54,8 +54,7 @@ type NoteMsg =
     | SetNoteResult of Result<FullNote, string>
 
     | ChangeNotePageMode of NotePageMode
-    // /// Допустимо только в режиме редактирования
-    // | ChangeSavingState of SavingState
+
 type Msg =
     | SearchMsg of SearchMsg
     | NoteMsg of NoteMsg
@@ -68,6 +67,9 @@ let todosApi =
 
 open Feliz.Router
 
+[<Literal>]
+let NoteRoute = "note"
+
 let parseUrl state segments =
     match segments with
     | [] ->
@@ -76,7 +78,7 @@ let parseUrl state segments =
             | SearchPage searchState -> searchState
             | _ -> SearchState.Empty
         { state with CurrentPage = SearchPage searchState}, Cmd.none
-    | "notes"::noteId::_ ->
+    | NoteRoute::noteId::_ ->
         let cmd = Cmd.OfAsync.perform todosApi.getNote noteId (GetNoteResult >> NoteMsg)
         { state with CurrentPage = NotePage InProgress }, cmd
     | _ ->
@@ -296,7 +298,7 @@ let containerBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                                 li [ ] [
                                     div [] [
                                         Button.a [
-                                            Button.Props [ Href (Router.format ["notes"; path]) ]
+                                            Button.Props [ Href (Router.format [NoteRoute; path]) ]
                                         ] [
                                             str path
                                         ]
