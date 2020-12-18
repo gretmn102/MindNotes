@@ -427,6 +427,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                     editModeState.FullNoteTemp.Note.Tags
                                     |> InputTags.inputTags
                                         "inputTagsId"
+                                        editModeState.InputTagsState
                                         (fun tag ->
                                             { editModeState with
                                                 FullNoteTemp =
@@ -452,9 +453,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> NoteMsg
                                             |> dispatch
                                         )
-                                        (fun f ->
-                                            let st, tag = f editModeState.InputTagsState
-
+                                        (fun (st, tag) ->
                                             { editModeState with
                                                 InputTagsState = st
                                                 FullNoteTemp =

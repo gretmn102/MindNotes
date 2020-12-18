@@ -11,13 +11,15 @@ type Bulma = CssClasses<"https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.1/css/
 type State =
     {
         CurrentTag: string
+        IsActive: bool
     }
     static member Empty =
         {
             CurrentTag = ""
+            IsActive = false
         }
 
-let inputTags (inputId:string) removeTag changeState addTag tags =
+let inputTags (inputId:string) (state:State) removeTag changeState addTag tags =
     let createTag (name:string) =
         Html.div [
             prop.className [
@@ -63,18 +65,24 @@ let inputTags (inputId:string) removeTag changeState addTag tags =
             Bulma.IsGrouped
             Bulma.IsGroupedMultiline
             Bulma.Input
+            if state.IsActive then
+                Bulma.IsActive
         ]
         prop.style [
             style.height length.auto
         ]
-        prop.onClick (fun e ->
-            let x = e.currentTarget :?> Types.HTMLDivElement
-            x.classList.add Bulma.IsActive
 
-            let x = document.getElementById inputId
-            x.focus()
-            ()
-        )
+        if not state.IsActive then
+            prop.onClick (fun e ->
+                if e.currentTarget = e.target then
+                    // let x = document.getElementById inputId
+                    // x.focus()
+                    { state with
+                        IsActive = true
+                    }
+                    |> changeState
+            )
+
         prop.children [
             yield! Seq.map createTag tags
 
@@ -95,26 +103,40 @@ let inputTags (inputId:string) removeTag changeState addTag tags =
                                 prop.placeholder "Add Tag"
                                 prop.classes [
                                     Bulma.Input
+                                    if state.IsActive then
+                                        Bulma.IsActive
                                 ]
                                 prop.style [
                                     style.width 172
                                     style.marginBottom (length.em 0.1)
                                     style.marginTop (length.em 0.1)
                                 ]
-
-                                prop.onClick (fun _ ->
-                                    let x = document.getElementById inputFieldId
-                                    x.classList.add Bulma.IsActive
+                                prop.ref (fun x ->
+                                    if not <| isNull x then
+                                        if state.IsActive then
+                                            let x = x :?> Types.HTMLElement
+                                            x.focus ()
                                 )
-                                prop.onBlur (fun _ ->
-                                    let x = document.getElementById inputFieldId
-                                    x.classList.remove Bulma.IsActive
-                                )
+                                if state.IsActive then
+                                    prop.onBlur (fun _ ->
+                                        { state with
+                                            IsActive = false
+                                        }
+                                        |> changeState
+                                    )
+                                    ()
+                                else
+                                    prop.onFocus (fun _ ->
+                                        { state with
+                                            IsActive = true
+                                        }
+                                        |> changeState
+                                    )
 
                                 // prop.spellcheck true // for some reason it doesn't work
                                 prop.custom ("spellCheck", true)
                                 prop.onTextChange (fun (tagName:string) ->
-                                    {
+                                    { state with
                                         CurrentTag = tagName
                                     }
                                     |> changeState
@@ -125,12 +147,11 @@ let inputTags (inputId:string) removeTag changeState addTag tags =
                                         let x = e.parentNode :?> Types.HTMLDivElement
                                         x.classList.remove Bulma.IsActive
 
-                                        fun state ->
-                                            let newState =
-                                                {
-                                                    CurrentTag = ""
-                                                }
-                                            newState, state.CurrentTag
+                                        let newState =
+                                            { state with
+                                                CurrentTag = ""
+                                            }
+                                        (newState, state.CurrentTag)
                                         |> addTag
                                 )
                             ]
@@ -150,12 +171,12 @@ let inputTags (inputId:string) removeTag changeState addTag tags =
                                     style.marginTop (length.em 0.1)
                                 ]
                                 prop.onClick (fun _ ->
-                                    fun state ->
-                                        let newState =
-                                            {
-                                                CurrentTag = ""
-                                            }
-                                        newState, state.CurrentTag
+                                    let newState =
+                                        { state with
+                                            IsActive = true
+                                            CurrentTag = ""
+                                        }
+                                    (newState, state.CurrentTag)
                                     |> addTag
                                 )
                                 prop.children [
