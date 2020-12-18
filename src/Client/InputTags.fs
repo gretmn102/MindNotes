@@ -4,6 +4,7 @@ open Feliz
 open Browser
 
 open Zanaptak.TypedCssClasses
+open Fable.FontAwesome
 
 type Bulma = CssClasses<"https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.1/css/bulma.min.css", Naming.PascalCase>
 
@@ -54,8 +55,9 @@ let inputTags (inputId:string) removeTag changeState addTag tags =
                 ]
             ]
         ]
-
+    let inputFieldId = "inputFieldId"
     Html.div [
+        prop.id inputFieldId
         prop.className [
             Bulma.Field
             Bulma.IsGrouped
@@ -76,52 +78,93 @@ let inputTags (inputId:string) removeTag changeState addTag tags =
         prop.children [
             yield! Seq.map createTag tags
 
-            Html.input [
-                prop.id inputId
-                prop.type' "text"
-                prop.placeholder "Add Tag"
-                prop.classes [
-                    Bulma.Input
+            Html.div [
+                prop.className [
+                    Bulma.Field
+                    Bulma.HasAddons
                 ]
-                prop.style [
-                    style.width 172
-                    style.marginBottom (length.em 0.1)
-                    style.marginTop (length.em 0.1)
+                prop.children [
+                    Html.div [
+                        prop.className [
+                            Bulma.Control
+                        ]
+                        prop.children [
+                            Html.input [
+                                prop.id inputId
+                                prop.type' "text"
+                                prop.placeholder "Add Tag"
+                                prop.classes [
+                                    Bulma.Input
+                                ]
+                                prop.style [
+                                    style.width 172
+                                    style.marginBottom (length.em 0.1)
+                                    style.marginTop (length.em 0.1)
+                                ]
+
+                                prop.onClick (fun _ ->
+                                    let x = document.getElementById inputFieldId
+                                    x.classList.add Bulma.IsActive
+                                )
+                                prop.onBlur (fun _ ->
+                                    let x = document.getElementById inputFieldId
+                                    x.classList.remove Bulma.IsActive
+                                )
+
+                                // prop.spellcheck true // for some reason it doesn't work
+                                prop.custom ("spellCheck", true)
+                                prop.onTextChange (fun (tagName:string) ->
+                                    {
+                                        CurrentTag = tagName
+                                    }
+                                    |> changeState
+                                )
+                                prop.onKeyDown (fun e ->
+                                    if e.key = "Enter" then
+                                        let e = e.target :?> Types.HTMLInputElement
+                                        let x = e.parentNode :?> Types.HTMLDivElement
+                                        x.classList.remove Bulma.IsActive
+
+                                        fun state ->
+                                            let newState =
+                                                {
+                                                    CurrentTag = ""
+                                                }
+                                            newState, state.CurrentTag
+                                        |> addTag
+                                )
+                            ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.className [
+                            Bulma.Control
+                        ]
+                        prop.children [
+                            Html.a [
+                                prop.className [
+                                    Bulma.Button
+                                ]
+                                prop.style [
+                                    style.marginBottom (length.em 0.1)
+                                    style.marginTop (length.em 0.1)
+                                ]
+                                prop.onClick (fun _ ->
+                                    fun state ->
+                                        let newState =
+                                            {
+                                                CurrentTag = ""
+                                            }
+                                        newState, state.CurrentTag
+                                    |> addTag
+                                )
+                                prop.children [
+                                    Fa.i [ Fa.Solid.Check ] []
+                                ]
+                            ]
+                        ]
+                    ]
                 ]
-
-                prop.onClick (fun e ->
-                    let e = e.target :?> Types.HTMLInputElement
-                    let x = e.parentNode :?> Types.HTMLDivElement
-                    x.classList.add Bulma.IsActive
-                )
-                prop.onBlur (fun e ->
-                    let e = e.target :?> Types.HTMLInputElement
-                    let x = e.parentNode :?> Types.HTMLDivElement
-                    x.classList.remove Bulma.IsActive
-                )
-
-                // prop.spellcheck true // for some reason it doesn't work
-                prop.custom ("spellCheck", true)
-                prop.onTextChange (fun (tagName:string) ->
-                    {
-                        CurrentTag = tagName
-                    }
-                    |> changeState
-                )
-                prop.onKeyDown (fun e ->
-                    if e.key = "Enter" then
-                        let e = e.target :?> Types.HTMLInputElement
-                        let x = e.parentNode :?> Types.HTMLDivElement
-                        x.classList.remove Bulma.IsActive
-
-                        fun state ->
-                            let newState =
-                                {
-                                    CurrentTag = ""
-                                }
-                            newState, state.CurrentTag
-                        |> addTag
-                )
             ]
         ]
     ]
