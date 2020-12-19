@@ -99,12 +99,10 @@ let getNote id =
         Error (sprintf "%s not found" path)
 let setNote (fullNote:FullNote) =
     try
-        use fileWriter = System.IO.File.OpenWrite fullNote.Path
+        use sw = new System.IO.StreamWriter(fullNote.Path, false)
         let str = MindNotes.Api.notePrint fullNote.Note
-        let bytes = System.Text.UTF8Encoding.UTF8.GetBytes str
+        sw.Write str
 
-        use m = new System.IO.MemoryStream(bytes)
-        m.WriteTo fileWriter
         { fullNote with Html = MarkdownConverter.toMarkdown fullNote.Note.Text}
         |> Ok
     with e -> Error e.Message
@@ -112,12 +110,18 @@ let newNote () =
     let dateTime = System.DateTime.Now
     let path = System.IO.Path.Combine(notesDir, sprintf "%s.md" (MindNotes.Api.datetimeFileFormat dateTime))
     try
-        use file = System.IO.File.Create path
+        use fs = System.IO.File.Create path
+
+        let note: MindNotes.Api.Note =
+            { Tags = []; DateTime = Some dateTime; Text = "" }
+        let str = MindNotes.Api.notePrint note
+        let bytes = System.Text.UTF8Encoding.UTF8.GetBytes str
+        fs.Write(bytes, 0, bytes.Length)
+
         {
             Path = path
             Html = ""
-            Note =
-                { DateTime = Some dateTime; Tags = []; Text = "" }
+            Note = note
         }
         |> Ok
     with e -> Error e.Message
