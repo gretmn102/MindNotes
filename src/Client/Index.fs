@@ -33,12 +33,14 @@ type NotePageState =
 type SearchState =
     {
         SearchResult: Result<(string * MindNotes.Api.Note) list,string> Deferred
-        SearchPattern: string
+        FilterPattern: FilterPattern
+        InputTagsState: InputTags.State
     }
     static member Empty =
         {
             SearchResult = HasNotStartedYet
-            SearchPattern = ""
+            FilterPattern = FilterPattern.Empty
+            InputTagsState = InputTags.State.Empty
         }
 type Page =
     | NotePage of Result<NotePageState,string> Deferred
@@ -49,7 +51,7 @@ type State =
     }
 
 type SearchMsg =
-    | ChangeSearchPattern of string
+    | ChangeSearchPattern of SearchState
     | Search
     | SearchResult of Result<(string * MindNotes.Api.Note) list,string>
 type NoteId = string
@@ -77,6 +79,8 @@ open Feliz.Router
 
 [<Literal>]
 let NoteRoute = "note"
+[<Literal>]
+let TagRoute = "tag"
 
 let parseUrl state segments =
     match segments with
@@ -103,6 +107,27 @@ let parseUrl state segments =
                 Cmd.OfAsync.perform todosApi.getNote noteId
                     (fun fullNote -> GetNoteResult(fullNote, false) |> NoteMsg)
             { state with CurrentPage = NotePage InProgress }, cmd
+    | TagRoute::tag::_ ->
+        let filterPattern =
+            {
+                SearchPattern = SearchPattern.Empty
+                Tags = [tag]
+            }
+        let cmd =
+            Cmd.OfAsync.perform todosApi.notesFilterByPattern
+                filterPattern
+                (SearchResult >> SearchMsg)
+        let state =
+            { state with
+                CurrentPage =
+                    SearchPage
+                        {
+                            FilterPattern = filterPattern
+                            SearchResult = InProgress
+                            InputTagsState = InputTags.State.Empty
+                        }
+            }
+        state, cmd
     | _ ->
         state, Cmd.none
 
@@ -118,37 +143,42 @@ let init(): State * Cmd<Msg> =
 let update (msg: Msg) (state: State): State * Cmd<Msg> =
     match msg with
     | SearchMsg x ->
-        match state.CurrentPage with
-        | SearchPage searchPageState ->
-            match x with
-            | ChangeSearchPattern value ->
-                let state =
-                    { state with
-                        CurrentPage =
-                            SearchPage { searchPageState with SearchPattern = value }}
-                state, Cmd.none
-            | Search ->
-                let todo = Todo.create searchPageState.SearchPattern
-                let cmd = Cmd.OfAsync.perform todosApi.notesFilterByPattern todo.Description (SearchResult >> SearchMsg)
-                let state =
-                    { state with
-                        CurrentPage =
-                            SearchPage
-                                { searchPageState with
-                                    SearchPattern = ""
-                                    SearchResult = InProgress
-                                }
-                    }
-                state, cmd
-            | SearchResult searchResult ->
-                let state =
-                    { state with
-                        CurrentPage =
-                            SearchPage
-                                { searchPageState with
-                                    SearchResult = Resolved searchResult }}
-                state, Cmd.none
-        | x -> failwithf "expected SearchPage, but %A" x
+        match x with
+        | ChangeSearchPattern value ->
+            let state =
+                { state with
+                    CurrentPage =
+                        SearchPage value
+                }
+            state, Cmd.none
+        | x ->
+            match state.CurrentPage with
+            | SearchPage searchPageState ->
+                match x with
+                | Search ->
+                    let cmd =
+                        Cmd.OfAsync.perform todosApi.notesFilterByPattern
+                            searchPageState.FilterPattern
+                            (SearchResult >> SearchMsg)
+                    let state =
+                        { state with
+                            CurrentPage =
+                                SearchPage
+                                    { searchPageState with
+                                        SearchResult = InProgress
+                                    }
+                        }
+                    state, cmd
+                | SearchResult searchResult ->
+                    let state =
+                        { state with
+                            CurrentPage =
+                                SearchPage
+                                    { searchPageState with
+                                        SearchResult = Resolved searchResult }}
+                    state, Cmd.none
+                | ChangeSearchPattern(_) -> failwith "Not Implemented"
+            | x -> failwithf "expected SearchPage, but %A" x
     | ChangeUrl segments ->
         parseUrl state segments
     | NoteMsg x ->
@@ -324,19 +354,76 @@ let navBrand dispatch =
             ]
         ]
     ]
+let activatedTagsRender tags =
+    tags
+    |> List.map (fun x ->
+        Tag.tag [
+        ] [
+            a [Href (Router.format [TagRoute; x])] [str x]
+        ])
+    |> Tag.list []
 
-let containerBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
+let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
     Box.box' [ ] [
+        searchState.FilterPattern.Tags
+        |> InputTags.inputTags
+            "inputTagsId"
+            searchState.InputTagsState
+            (fun tag ->
+                { searchState with
+                    FilterPattern =
+                        { searchState.FilterPattern with
+                            Tags = searchState.FilterPattern.Tags |> List.filter ((<>) tag)
+                        }
+                }
+                |> ChangeSearchPattern
+                |> dispatch
+            )
+            (fun st ->
+                { searchState with InputTagsState = st }
+                |> ChangeSearchPattern
+                |> dispatch
+            )
+            (fun (st, tag) ->
+                { searchState with
+                    InputTagsState = st
+                    FilterPattern =
+                        { searchState.FilterPattern with
+                            Tags =
+                                List.foldBack
+                                    (fun x st ->
+                                        if x = tag then st
+                                        else x::st
+                                    )
+                                    searchState.FilterPattern.Tags
+                                    [tag]
+                        }
+                }
+                |> ChangeSearchPattern
+                |> dispatch
+            )
         Field.div [ Field.HasAddons ] [
             Control.p [ Control.IsExpanded ] [
                 Input.text [
-                    Input.Value searchState.SearchPattern
+                    Input.Value searchState.FilterPattern.SearchPattern.Pattern
                     Input.Placeholder "Find"
-                    Input.OnChange (fun x -> ChangeSearchPattern x.Value |> dispatch) ]
+                    Input.OnChange (fun x ->
+                        { searchState with
+                            FilterPattern =
+                            { searchState.FilterPattern with
+                                SearchPattern =
+                                    { searchState.FilterPattern.SearchPattern with
+                                        Pattern = x.Value }
+                            }
+                        }
+                        |> ChangeSearchPattern
+                        |> dispatch) ]
             ]
             Control.p [ ] [
                 Button.a [
-                    let disabled = System.String.IsNullOrWhiteSpace searchState.SearchPattern
+                    let disabled =
+                        System.String.IsNullOrWhiteSpace searchState.FilterPattern.SearchPattern.Pattern
+                        && List.isEmpty searchState.FilterPattern.Tags
                     Button.Disabled disabled
                     if not disabled then
                         Button.OnClick (fun _ -> dispatch Search)
@@ -387,8 +474,7 @@ let containerBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                                             ]
                                         | None -> ()
 
-                                        note.Tags |> List.map (fun x -> Tag.tag [] [str x])
-                                        |> Tag.list []
+                                        activatedTagsRender note.Tags
 
                                         str (MindNotes.Api.getShortDscr note)
                                     ]
@@ -425,7 +511,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                         ] [
                             Heading.p [ Heading.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ] [ str "SAFE" ]
 
-                            containerBox searchState (SearchMsg >> dispatch)
+                            searchBox searchState (SearchMsg >> dispatch)
                         ]
                     ]
                 | NotePage notePageState ->
@@ -469,8 +555,7 @@ let view (state : State) (dispatch : Msg -> unit) =
 
                                 match note.Mode with
                                 | ViewMode ->
-                                    note.FullNote.Note.Tags |> List.map (fun x -> Tag.tag [] [str x])
-                                    |> Tag.list []
+                                    activatedTagsRender note.FullNote.Note.Tags
 
                                     Button.button
                                         [

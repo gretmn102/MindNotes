@@ -16,10 +16,8 @@ module Result =
         | Right x -> Ok x
         | Left x -> Error x
 
-let notesFilterByPattern pattern =
-    let notesFilterByPattern pattern =
-        let regex = System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-
+let notesFilter pred =
+    try
         let notesPaths = System.IO.Directory.EnumerateFiles notesDir
 
         notesPaths
@@ -30,15 +28,50 @@ let notesFilterByPattern pattern =
         |> Seq.seqEither
         |> Either.map (fun notes ->
             notes
-            |> List.filter (fun (_, note) ->
-                regex.IsMatch note.Text
-            )
+            |> List.filter pred
         )
         |> Result.ofEither
-    try
-        notesFilterByPattern pattern
     with
         | exp -> Error (exp.Message)
+
+let notesFilterByPattern (filterPattern:FilterPattern) =
+    let regEx =
+        let patt = filterPattern.SearchPattern.Pattern
+        if System.String.IsNullOrEmpty patt then
+            fun _ -> true
+        else
+            if filterPattern.SearchPattern.IsRegex then
+                let regex =
+                    if filterPattern.SearchPattern.MatchCase then
+                        System.Text.RegularExpressions.Regex patt
+                    else
+                        System.Text.RegularExpressions.Regex
+                            (patt,
+                             System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                fun (note:MindNotes.Api.Note) -> regex.IsMatch note.Text
+            else
+                fun note ->
+                    if filterPattern.SearchPattern.MatchCase then
+                        note.Text.Contains patt
+                    else
+                        note.Text.Contains
+                            (patt,
+                             System.StringComparison.OrdinalIgnoreCase)
+    let tagsFilter =
+        match filterPattern.Tags with
+        | [] -> fun _ -> true
+        | [tag] ->
+            fun (note:MindNotes.Api.Note) ->
+                List.contains tag note.Tags
+        | tags ->
+            fun note ->
+                let set = Set.ofList note.Tags
+                tags
+                |> List.forall (flip Set.contains set)
+
+    notesFilter (fun (_, note) ->
+        tagsFilter note && regEx note
+    )
 
 let getNote id =
     let path = id

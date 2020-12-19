@@ -2,18 +2,6 @@ namespace Shared
 
 open System
 
-type Todo =
-    { Id : Guid
-      Description : string }
-
-module Todo =
-    let isValid (description: string) =
-        String.IsNullOrWhiteSpace description |> not
-
-    let create (description: string) =
-        { Id = Guid.NewGuid()
-          Description = description }
-
 module Route =
     let builder typeName methodName =
         sprintf "/api/%s/%s" typeName methodName
@@ -21,9 +9,27 @@ module Route =
 type FullNote =
     { Path:string; Note:MindNotes.Api.Note; Html:string }
 
+type SearchPattern =
+    {
+        Pattern:string
+        IsRegex:bool
+        MatchCase:bool
+    }
+    static member Empty =
+        { Pattern = ""; IsRegex = false; MatchCase = false }
+type FilterPattern =
+    {
+        SearchPattern: SearchPattern
+        Tags: string list
+    }
+    static member Empty =
+        {
+            SearchPattern = SearchPattern.Empty
+            Tags = []
+        }
 type ITodosApi =
     {
-        notesFilterByPattern : string -> Async<Result<list<string * MindNotes.Api.Note>,string>>
+        notesFilterByPattern : FilterPattern -> Async<Result<list<string * MindNotes.Api.Note>,string>>
         getNote : string -> Async<Result<FullNote, string>>
         setNote : FullNote -> Async<Result<FullNote, string>>
         newNote : unit -> Async<Result<FullNote, string>>
