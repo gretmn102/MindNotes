@@ -37,3 +37,8 @@ let getShortDscr (note:Note) =
         dscr
     else
         sprintf "%s..." dscr.[..length - 1]
+
+let datetimeFileFormat (d:System.DateTime) =
+    d.ToString("yyyy-MM-dd_HH-mm-ss")
+assert
+    (System.DateTime.Parse "18.11.2020 13:12:22" |> datetimeFileFormat = "2020-11-18_13-12-22")

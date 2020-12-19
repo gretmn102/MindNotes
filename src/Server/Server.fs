@@ -41,15 +41,29 @@ let notesFilterByPattern pattern =
         | exp -> Error (exp.Message)
 
 let getNote id =
-    MindNotes.Api.Parser.parseNoteOnFile id
-    |> Either.map (fun note ->
-        {
-            Path = id
-            Note = note
-            Html = MarkdownConverter.toMarkdown note.Text
-        }
-    )
-    |> Result.ofEither
+    let path = id
+    let fi = System.IO.FileInfo path
+    if fi.Exists then
+        if fi.Length > 0L then
+            MindNotes.Api.Parser.parseNoteOnFile path
+            |> Either.map (fun note ->
+                {
+                    Path = path
+                    Note = note
+                    Html = MarkdownConverter.toMarkdown note.Text
+                }
+            )
+            |> Result.ofEither
+        else
+            {
+                Path = path
+                Note =
+                    { DateTime = None; Tags = []; Text = "" }
+                Html = ""
+            }
+            |> Ok
+    else
+        Error (sprintf "%s not found" path)
 let setNote (fullNote:FullNote) =
     try
         use fileWriter = System.IO.File.OpenWrite fullNote.Path
@@ -61,11 +75,26 @@ let setNote (fullNote:FullNote) =
         { fullNote with Html = MarkdownConverter.toMarkdown fullNote.Note.Text}
         |> Ok
     with e -> Error e.Message
+let newNote () =
+    let dateTime = System.DateTime.Now
+    let path = System.IO.Path.Combine(notesDir, sprintf "%s.md" (MindNotes.Api.datetimeFileFormat dateTime))
+    try
+        use file = System.IO.File.Create path
+        {
+            Path = path
+            Html = ""
+            Note =
+                { DateTime = Some dateTime; Tags = []; Text = "" }
+        }
+        |> Ok
+    with e -> Error e.Message
+
 let api =
     {
         notesFilterByPattern = fun pattern -> async { return notesFilterByPattern pattern }
         getNote = fun id -> async { return getNote id }
         setNote = fun fullNote -> async { return setNote fullNote }
+        newNote = fun () -> async { return newNote () }
     }
 
 let webApp =

@@ -55,7 +55,7 @@ type SearchMsg =
 type NoteId = string
 type NoteMsg =
     /// А сам `GetNote` воплощается через Router
-    | GetNoteResult of Result<FullNote,string>
+    | GetNoteResult of Result<FullNote,string> * editMode:bool
     | SetNote
     | SetNoteResult of Result<FullNote, string>
 
@@ -65,6 +65,8 @@ type Msg =
     | SearchMsg of SearchMsg
     | NoteMsg of NoteMsg
     | ChangeUrl of string list
+    | CreateNote
+    | CreateNoteResult of Result<NoteId, string>
 
 let todosApi =
     Remoting.createApi()
@@ -84,9 +86,23 @@ let parseUrl state segments =
             | SearchPage searchState -> searchState
             | _ -> SearchState.Empty
         { state with CurrentPage = SearchPage searchState}, Cmd.none
-    | NoteRoute::noteId::_ ->
-        let cmd = Cmd.OfAsync.perform todosApi.getNote noteId (GetNoteResult >> NoteMsg)
-        { state with CurrentPage = NotePage InProgress }, cmd
+    | NoteRoute::noteId::query ->
+        match query with
+        | [Route.Query (("mode", mode)::_)] ->
+            let editMode =
+                match mode with
+                | "edit" -> true
+                | _ -> false
+            let cmd =
+                Cmd.OfAsync.perform todosApi.getNote noteId
+                    (fun fullNote -> GetNoteResult(fullNote, editMode) |> NoteMsg)
+
+            { state with CurrentPage = NotePage InProgress }, cmd
+        | _ ->
+            let cmd =
+                Cmd.OfAsync.perform todosApi.getNote noteId
+                    (fun fullNote -> GetNoteResult(fullNote, false) |> NoteMsg)
+            { state with CurrentPage = NotePage InProgress }, cmd
     | _ ->
         state, Cmd.none
 
@@ -137,13 +153,22 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         parseUrl state segments
     | NoteMsg x ->
         match x with
-        | GetNoteResult x ->
+        | GetNoteResult(fullNoteResult, editMode) ->
             let x =
-                x
+                fullNoteResult
                 |> Result.map (fun fullNote ->
                     {
                         FullNote = fullNote
-                        Mode = ViewMode
+                        Mode =
+                            if editMode then
+                                {
+                                    FullNoteTemp = fullNote
+                                    SetFullNoteResult = Saved
+                                    InputTagsState = InputTags.State.Empty
+                                }
+                                |> EditMode
+                            else
+                                ViewMode
                     }
                 )
             { state with CurrentPage = NotePage (Resolved x)}, Cmd.none
@@ -241,13 +266,43 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                 { state with
                     CurrentPage = st }
             state, cmd
+    | CreateNote ->
+        let cmd =
+            Cmd.OfAsync.perform todosApi.newNote ()
+                // (fun fullNote -> GetNoteResult(fullNote, true) |> NoteMsg)
+                (function
+                    | Ok x ->
+                        CreateNoteResult (Ok x.Path)
+                    | Error errMsg -> CreateNoteResult (Error errMsg) )
 
+        let state =
+            { state with
+                CurrentPage =
+                    NotePage InProgress }
+        state, cmd
+    | CreateNoteResult noteIdResult ->
+        match noteIdResult with
+        | Ok noteId ->
+            let cmd =
+                Feliz.Router.Cmd.navigate
+                    [|
+                        NoteRoute
+                        noteId
+                        Router.encodeQueryString ["mode", "edit"]
+                    |]
+            state, cmd
+        | Error errMsg ->
+            let state =
+                { state with
+                    CurrentPage =
+                        NotePage (Resolved (Error errMsg)) }
+            state, Cmd.none
 open Fable.React
 open Fable.React.Props
 open Fulma
 open Fable.FontAwesome
 
-let navBrand =
+let navBrand dispatch =
     Navbar.Brand.div [ ] [
         Navbar.Item.a [
             Navbar.Item.Props [ Href "https://safe-stack.github.io/" ]
@@ -256,6 +311,16 @@ let navBrand =
             img [
                 Src "/favicon.png"
                 Alt "Logo"
+            ]
+        ]
+        Navbar.Item.div [
+        ] [
+            Button.button [
+                Button.OnClick (fun _ ->
+                    dispatch CreateNote
+                )
+            ] [
+                Fa.i [ Fa.Solid.FileAlt ] []
             ]
         ]
     ]
@@ -345,7 +410,7 @@ let view (state : State) (dispatch : Msg -> unit) =
     ] [
         Hero.head [ ] [
             Navbar.navbar [ ] [
-                Container.container [ ] [ navBrand ]
+                Container.container [ ] [ navBrand dispatch ]
             ]
         ]
 

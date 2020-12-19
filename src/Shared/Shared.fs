@@ -26,4 +26,5 @@ type ITodosApi =
         notesFilterByPattern : string -> Async<Result<list<string * MindNotes.Api.Note>,string>>
         getNote : string -> Async<Result<FullNote, string>>
         setNote : FullNote -> Async<Result<FullNote, string>>
+        newNote : unit -> Async<Result<FullNote, string>>
     }
