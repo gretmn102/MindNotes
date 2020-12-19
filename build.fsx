@@ -61,15 +61,17 @@ Target.create "Azure" (fun _ ->
     |> Deploy.execute "SAFE" Deploy.NoParameters
     |> ignore
 )
-
-Target.create "Run" (fun _ ->
+let run () =
     dotnet "build" sharedPath
     [ async { dotnet "watch run" serverPath }
       async { npm "run start" "." } ]
     |> Async.Parallel
     |> Async.RunSynchronously
     |> ignore
-)
+
+Target.create "Run" (fun _ -> run ())
+
+Target.create "JustRun" (fun _ -> run ())
 
 Target.create "RunTests" (fun _ ->
     dotnet "build" sharedTestsPath
@@ -94,5 +96,9 @@ open Fake.Core.TargetOperators
 "Clean"
     ==> "InstallClient"
     ==> "RunTests"
+
+"Clean"
+    ==> "InstallClient"
+    ==> "Run"
 
 Target.runOrDefaultWithArguments "Bundle"
