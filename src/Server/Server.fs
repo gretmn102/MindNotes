@@ -130,7 +130,19 @@ let api =
     {
         notesFilterByPattern = fun pattern -> async { return notesFilterByPattern pattern }
         getNote = fun id -> async { return getNote id }
-        setNote = fun fullNote -> async { return setNote fullNote }
+        setNote = fun fullNote ->
+            async {
+                let fullNote =
+                    match fullNote.Note.DateTime with // local time is sent to the client, but the client returns UTC
+                    | Some dateTimeUniversal ->
+                        { fullNote with
+                            Note =
+                                { fullNote.Note with
+                                    DateTime = Some (dateTimeUniversal.ToLocalTime()) }
+                        }
+                    | None -> fullNote
+                return setNote fullNote
+            }
         newNote = fun () -> async { return newNote () }
     }
 
