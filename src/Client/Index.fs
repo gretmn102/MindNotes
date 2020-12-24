@@ -403,6 +403,9 @@ let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                 |> dispatch
             )
         Field.div [ Field.HasAddons ] [
+            let disabled =
+                System.String.IsNullOrWhiteSpace searchState.FilterPattern.SearchPattern.Pattern
+                && List.isEmpty searchState.FilterPattern.Tags
             Control.p [ Control.IsExpanded ] [
                 Input.text [
                     Input.Value searchState.FilterPattern.SearchPattern.Pattern
@@ -417,13 +420,18 @@ let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                             }
                         }
                         |> ChangeSearchPattern
-                        |> dispatch) ]
+                        |> dispatch)
+                    if not disabled then
+                        Input.Props [
+                            OnKeyDown (fun e ->
+                                if e.key = "Enter" then
+                                    dispatch Search
+                            )
+                        ]
+                ]
             ]
             Control.p [ ] [
                 Button.a [
-                    let disabled =
-                        System.String.IsNullOrWhiteSpace searchState.FilterPattern.SearchPattern.Pattern
-                        && List.isEmpty searchState.FilterPattern.Tags
                     Button.Disabled disabled
                     if not disabled then
                         Button.OnClick (fun _ -> dispatch Search)
@@ -646,6 +654,17 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> NoteMsg
                                             |> dispatch
                                           )
+                                          match editModeState.SetFullNoteResult with
+                                          | NotSaved | SavingError _ ->
+                                                Textarea.Props [
+                                                    OnKeyDown (fun e ->
+                                                        if e.ctrlKey && e.key = "Enter" then
+                                                            SetNote
+                                                            |> NoteMsg
+                                                            |> dispatch
+                                                    )
+                                                ]
+                                          | Saved | SavingInProgress -> ()
                                         ] []
                                     match editModeState.SetFullNoteResult with
                                     | NotSaved ->
