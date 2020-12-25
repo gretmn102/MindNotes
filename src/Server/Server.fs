@@ -10,6 +10,9 @@ let notesDir = @"i:\Notes" // TODO: вынести в config
 open FsharpMyExtension
 open FsharpMyExtension.Either
 
+let idToPath (id:Shared.NoteId) = System.IO.Path.Combine(notesDir, id + ".md")
+let pathToId (path:string): Shared.NoteId = System.IO.Path.GetFileNameWithoutExtension path
+
 module Result =
     open FsharpMyExtension.Either
     let ofEither = function
@@ -23,7 +26,13 @@ let notesFilter pred =
         notesPaths
         |> Seq.map (fun notePath ->
             MindNotes.Api.Parser.parseNoteOnFile notePath
-            |> Either.map (fun note -> notePath, note)
+            |> Either.map (fun note ->
+                {
+                    Id = pathToId notePath
+                    Path = notePath
+                    Note = note
+                    Html = ""
+                })
         )
         |> Seq.seqEither
         |> Either.map (fun notes ->
@@ -69,18 +78,20 @@ let notesFilterByPattern (filterPattern:FilterPattern) =
                 tags
                 |> List.forall (flip Set.contains set)
 
-    notesFilter (fun (_, note) ->
+    notesFilter (fun x ->
+        let note = x.Note
         tagsFilter note && regEx note
     )
 
 let getNote id =
-    let path = id
+    let path = idToPath id
     let fi = System.IO.FileInfo path
     if fi.Exists then
         if fi.Length > 0L then
             MindNotes.Api.Parser.parseNoteOnFile path
             |> Either.map (fun note ->
                 {
+                    Id = id
                     Path = path
                     Note = note
                     Html = MarkdownConverter.toMarkdown note.Text
@@ -89,6 +100,7 @@ let getNote id =
             |> Result.ofEither
         else
             {
+                Id = id
                 Path = path
                 Note =
                     { DateTime = None; Tags = []; Text = "" }
@@ -108,7 +120,8 @@ let setNote (fullNote:FullNote) =
     with e -> Error e.Message
 let newNote () =
     let dateTime = System.DateTime.Now
-    let path = System.IO.Path.Combine(notesDir, sprintf "%s.md" (MindNotes.Api.datetimeFileFormat dateTime))
+    let id = MindNotes.Api.datetimeFileFormat dateTime
+    let path = idToPath id
     try
         use fs = System.IO.File.Create path
 
@@ -119,6 +132,7 @@ let newNote () =
         fs.Write(bytes, 0, bytes.Length)
 
         {
+            Id = id
             Path = path
             Html = ""
             Note = note

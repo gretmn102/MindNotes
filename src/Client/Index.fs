@@ -32,7 +32,7 @@ type NotePageState =
 
 type SearchState =
     {
-        SearchResult: Result<(string * MindNotes.Api.Note) list,string> Deferred
+        SearchResult: Result<FullNote list,string> Deferred
         FilterPattern: FilterPattern
         InputTagsState: InputTags.State
     }
@@ -53,7 +53,7 @@ type State =
 type SearchMsg =
     | ChangeSearchPattern of SearchState
     | Search
-    | SearchResult of Result<(string * MindNotes.Api.Note) list,string>
+    | SearchResult of Result<FullNote list,string>
 type NoteId = string
 type NoteMsg =
     /// А сам `GetNote` воплощается через Router
@@ -302,7 +302,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                 // (fun fullNote -> GetNoteResult(fullNote, true) |> NoteMsg)
                 (function
                     | Ok x ->
-                        CreateNoteResult (Ok x.Path)
+                        CreateNoteResult (Ok x.Id)
                     | Error errMsg -> CreateNoteResult (Error errMsg) )
 
         let state =
@@ -458,20 +458,21 @@ let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                         Text.p [] [str "not found"]
                     else
                         ul [ ] [
-                            for path, note in xs do
+                            for x in xs do
+                                let note = x.Note
                                 li [ ] [
                                     div [] [
                                         Button.a [
-                                            Button.Props [ Href (Router.format [NoteRoute; path]) ]
+                                            Button.Props [ Href (Router.format [NoteRoute; x.Id]) ]
                                         ] [
-                                            str path
+                                            str x.Path
                                         ]
 
                                         match Browser.Navigator.navigator.clipboard with
                                         | Some clipboard ->
                                             Button.span [
                                                 Button.OnClick (fun _ ->
-                                                    clipboard.writeText path
+                                                    clipboard.writeText x.Path
                                                     |> ignore
                                                 )
                                             ] [

@@ -5,9 +5,14 @@ open System
 module Route =
     let builder typeName methodName =
         sprintf "/api/%s/%s" typeName methodName
-
+type NoteId = string
 type FullNote =
-    { Path:string; Note:MindNotes.Api.Note; Html:string }
+    {
+        Id: string
+        Path:string
+        Note:MindNotes.Api.Note
+        Html:string
+    }
 
 type SearchPattern =
     {
@@ -29,8 +34,8 @@ type FilterPattern =
         }
 type ITodosApi =
     {
-        notesFilterByPattern : FilterPattern -> Async<Result<list<string * MindNotes.Api.Note>,string>>
-        getNote : string -> Async<Result<FullNote, string>>
+        notesFilterByPattern : FilterPattern -> Async<Result<list<FullNote>,string>>
+        getNote : NoteId -> Async<Result<FullNote, string>>
         setNote : FullNote -> Async<Result<FullNote, string>>
         newNote : unit -> Async<Result<FullNote, string>>
     }
