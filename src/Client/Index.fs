@@ -67,7 +67,7 @@ type Msg =
     | SearchMsg of SearchMsg
     | NoteMsg of NoteMsg
     | ChangeUrl of string list
-    | CreateNote
+
     | CreateNoteResult of Result<NoteId, string>
 
 let todosApi =
@@ -81,6 +81,8 @@ open Feliz.Router
 let NoteRoute = "note"
 [<Literal>]
 let TagRoute = "tag"
+[<Literal>]
+let CreateNoteRoute = "createNote"
 
 let parseUrl state segments =
     match segments with
@@ -127,6 +129,19 @@ let parseUrl state segments =
                             InputTagsState = InputTags.State.Empty
                         }
             }
+        state, cmd
+    | CreateNoteRoute::_ ->
+        let cmd =
+            Cmd.OfAsync.perform todosApi.newNote ()
+                (function
+                    | Ok x ->
+                        CreateNoteResult (Ok x.Id)
+                    | Error errMsg -> CreateNoteResult (Error errMsg) )
+
+        let state =
+            { state with
+                CurrentPage =
+                    NotePage InProgress }
         state, cmd
     | _ ->
         state, Cmd.none
@@ -296,20 +311,6 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                 { state with
                     CurrentPage = st }
             state, cmd
-    | CreateNote ->
-        let cmd =
-            Cmd.OfAsync.perform todosApi.newNote ()
-                // (fun fullNote -> GetNoteResult(fullNote, true) |> NoteMsg)
-                (function
-                    | Ok x ->
-                        CreateNoteResult (Ok x.Id)
-                    | Error errMsg -> CreateNoteResult (Error errMsg) )
-
-        let state =
-            { state with
-                CurrentPage =
-                    NotePage InProgress }
-        state, cmd
     | CreateNoteResult noteIdResult ->
         match noteIdResult with
         | Ok noteId ->
@@ -343,15 +344,10 @@ let navBrand dispatch =
                 Alt "Logo"
             ]
         ]
-        Navbar.Item.div [
+        Navbar.Item.a [
+            Navbar.Item.Props [ Href (Router.format CreateNoteRoute) ]
         ] [
-            Button.button [
-                Button.OnClick (fun _ ->
-                    dispatch CreateNote
-                )
-            ] [
-                Fa.i [ Fa.Solid.FileAlt ] []
-            ]
+            Fa.i [ Fa.Solid.FileAlt ] []
         ]
     ]
 let activatedTagsRender tags =
