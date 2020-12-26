@@ -611,6 +611,13 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> dispatch
                                         )
                                         (fun (st, tag) ->
+                                            let tag =
+                                                tag
+                                                |> String.collect
+                                                    (function
+                                                     | ' ' -> "_"
+                                                     | '#' -> ""
+                                                     | x -> string x)
                                             { editModeState with
                                                 InputTagsState = st
                                                 FullNoteTemp =
