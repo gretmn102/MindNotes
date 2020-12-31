@@ -6,8 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="paket.references" />
-    <Compile Include="MarkdownConverter.fs" />
     <Compile Include="MindNotesApi.fs" />
+    <Compile Include="MarkdownConverter.fs" />
     <Compile Include="Note.fs" />
     <Compile Include="Server.fs" />
   </ItemGroup>

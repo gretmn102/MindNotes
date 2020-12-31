@@ -118,8 +118,17 @@ module Parser =
         |> notesPrint
         |> uncurry System.IO.File.WriteAllText "output\\output.txt"
 
-    // test2 "notes.txt"
-    // test2() |> allTags
+    /// `yyyy-MM-dd_HH-mm-ss`
+    let pdateTimeFileFormat: _ Parser =
+        pipe5
+            pint32
+            (pchar '-' >>. pint32)
+            (pchar '-' >>. pint32)
+            (pchar '_' >>. pint32)
+            (pchar '-' >>. pint32 .>>. (pchar '-' >>. pint32))
+            (fun year month day hour (minute, sec) ->
+                System.DateTime(year, month, day, hour, minute, sec)
+            )
 
 open Parser
 
