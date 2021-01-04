@@ -355,16 +355,18 @@ open Fable.React.Props
 open Fulma
 open Fable.FontAwesome
 
-let navBrand =
+let navBrand (state:State) =
     Navbar.Brand.div [ ] [
         Navbar.Item.a [
-            Navbar.Item.Props [ Href "https://safe-stack.github.io/" ]
-            Navbar.Item.IsActive true
+            let isSearchPage =
+                match state.CurrentPage with
+                | SearchPage _ -> true
+                | _ -> false
+            Navbar.Item.IsActive isSearchPage
+            if not isSearchPage then
+                Navbar.Item.Props [ Href (Router.format "") ]
         ] [
-            img [
-                Src "/favicon.png"
-                Alt "Logo"
-            ]
+            Fa.i [ Fa.Solid.Search ] []
         ]
         Navbar.Item.a [
             Navbar.Item.Props [ Href (Router.format CreateNoteRoute) ]
@@ -372,7 +374,13 @@ let navBrand =
             Fa.i [ Fa.Solid.FileAlt ] []
         ]
         Navbar.Item.a [
-            Navbar.Item.Props [ Href (Router.format GetTagsRoute) ]
+            let isActive =
+                match state.CurrentPage with
+                | TagsPage _ -> true
+                | _ -> false
+            Navbar.Item.IsActive isActive
+            if not isActive then
+                Navbar.Item.Props [ Href (Router.format GetTagsRoute) ]
         ] [
             Fa.i [ Fa.Solid.Tags ] []
         ]
@@ -528,7 +536,7 @@ let view (state : State) (dispatch : Msg -> unit) =
     ] [
         Hero.head [ ] [
             Navbar.navbar [ ] [
-                Container.container [ ] [ navBrand ]
+                Container.container [ ] [ navBrand state ]
             ]
         ]
 
@@ -558,52 +566,63 @@ let view (state : State) (dispatch : Msg -> unit) =
                         match res with
                         | Ok note ->
                             Container.container [] [
-                                Button.a [
-                                    Button.Props [ Href (Router.format "") ]
+                                Level.level [
                                 ] [
-                                    str "Search"
-                                ]
-                                Field.div [Field.HasAddons] [
-                                    Control.p [] [
-                                        Button.button [ Button.IsStatic true; Button.Color IsBlack ] [str note.FullNote.Path]
-                                    ]
-                                    match Browser.Navigator.navigator.clipboard with
-                                    | Some clipboard ->
-                                        Control.p [] [
-                                            Button.button [
-                                                Button.OnClick (fun _ ->
-                                                    clipboard.writeText note.FullNote.Path
-                                                    |> ignore
-                                                )
-                                            ] [
-                                                Fa.span [ Fa.Solid.Clipboard
-                                                          Fa.FixedWidth
+                                    Level.left [] [
+
+                                        Level.item [] [
+                                            Field.div [Field.HasAddons] [
+                                                Control.p [] [
+                                                    Button.button [ Button.IsStatic true; Button.Color IsBlack ] [
+                                                        match note.FullNote.Note.DateTime with
+                                                        | Some dateTime ->
+                                                            str (dateTime.ToString("dd.MM.yyyy HH:mm:ss"))
+                                                        | None ->
+                                                            str note.FullNote.Path
+                                                    ]
+                                                ]
+                                                match Browser.Navigator.navigator.clipboard with
+                                                | Some clipboard ->
+                                                    Control.p [] [
+                                                        Button.button [
+                                                            Button.OnClick (fun _ ->
+                                                                clipboard.writeText note.FullNote.Path
+                                                                |> ignore
+                                                            )
+                                                        ] [
+                                                            Fa.span [ Fa.Solid.Clipboard
+                                                                      Fa.FixedWidth
+                                                                    ]
+                                                                [ ]
                                                         ]
-                                                    [ ]
+                                                    ]
+                                                | None -> ()
                                             ]
                                         ]
-                                    | None -> ()
+                                        if note.Mode = ViewMode then
+                                            Level.item [] [
+                                                Button.button
+                                                    [
+                                                        Button.OnClick (fun _ ->
+                                                            {
+                                                                FullNoteTemp = note.FullNote
+                                                                SetFullNoteResult = Saved
+                                                                InputTagsState = InputTags.State.Empty
+                                                            }
+                                                            |> EditMode
+                                                            |> ChangeNotePageMode
+                                                            |> NoteMsg
+                                                            |> dispatch
+                                                        )
+                                                    ]
+                                                    [ Fa.i [ Fa.Solid.Edit ] [] ]
+                                            ]
+                                    ]
                                 ]
-
                                 match note.Mode with
                                 | ViewMode ->
                                     activatedTagsRender note.FullNote.Note.Tags
 
-                                    Button.button
-                                        [
-                                            Button.OnClick (fun _ ->
-                                                {
-                                                    FullNoteTemp = note.FullNote
-                                                    SetFullNoteResult = Saved
-                                                    InputTagsState = InputTags.State.Empty
-                                                }
-                                                |> EditMode
-                                                |> ChangeNotePageMode
-                                                |> NoteMsg
-                                                |> dispatch
-                                            )
-                                        ]
-                                        [ Fa.i [ Fa.Solid.Edit ] [] ]
                                     Content.content [] [
                                         div [ DangerouslySetInnerHTML { __html = note.FullNote.Html } ] []
                                     ]
