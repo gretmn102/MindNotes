@@ -38,4 +38,5 @@ type ITodosApi =
         getNote : NoteId -> Async<Result<FullNote, string>>
         setNote : FullNote -> Async<Result<FullNote, string>>
         newNote : unit -> Async<Result<FullNote, string>>
+        getTags : unit -> Async<MindNotes.Api.Tag list>
     }

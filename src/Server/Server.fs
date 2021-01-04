@@ -19,6 +19,26 @@ module Result =
         | Right x -> Ok x
         | Left x -> Error x
 
+type State =
+    | GetTags of AsyncReplyChannel<MindNotes.Api.Tag Set>
+    | SetTags of MindNotes.Api.Tag Set
+let mail =
+    MailboxProcessor.Start (fun r ->
+        let rec loop state =
+            async {
+                let! m = r.Receive()
+                match m with
+                | GetTags r ->
+                    r.Reply state
+                    return! loop state
+                | SetTags xs ->
+                    return! loop xs
+            }
+        loop Set.empty
+    )
+let setTags xs = mail.Post (SetTags xs)
+let getTags () = mail.PostAndReply (fun r -> GetTags r)
+
 let notesFilter pred =
     try
         let notesPaths = System.IO.Directory.EnumerateFiles notesDir
@@ -37,7 +57,12 @@ let notesFilter pred =
         |> Seq.seqEither
         |> Either.map (fun notes ->
             notes
-            |> List.filter pred
+            |> List.chooseFold
+                (fun st note ->
+                    let res = if pred note then Some note else None
+                    let st = note.Note.Tags |> List.fold (fun st x -> Set.add x st) st
+                    res, st)
+                Set.empty
         )
         |> Result.ofEither
     with
@@ -142,7 +167,15 @@ let newNote () =
 
 let api =
     {
-        notesFilterByPattern = fun pattern -> async { return notesFilterByPattern pattern }
+        notesFilterByPattern = fun pattern ->
+            async {
+                match notesFilterByPattern pattern with
+                | Ok(notes, tags) ->
+                    setTags tags
+                    return Ok notes
+                | Error err ->
+                    return Error err
+            }
         getNote = fun id -> async { return getNote id }
         setNote = fun fullNote ->
             async {
@@ -158,6 +191,7 @@ let api =
                 return setNote fullNote
             }
         newNote = fun () -> async { return newNote () }
+        getTags = fun () -> async { return getTags () |> Set.toList }
     }
 
 let webApp =

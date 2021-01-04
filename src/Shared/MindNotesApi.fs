@@ -1,6 +1,6 @@
 module Shared.MindNotes.Api
-
-type Note = { DateTime:System.DateTime option; Tags:string list; Text:string }
+type Tag = string
+type Note = { DateTime:System.DateTime option; Tags:Tag list; Text:string }
 
 let notePrint (x:Note) =
     let datetime =

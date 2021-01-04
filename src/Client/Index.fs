@@ -45,6 +45,7 @@ type SearchState =
 type Page =
     | NotePage of Result<NotePageState,string> Deferred
     | SearchPage of SearchState
+    | TagsPage of Deferred<MindNotes.Api.Tag list>
 type State =
     {
         CurrentPage: Page
@@ -69,7 +70,7 @@ type Msg =
     | ChangeUrl of string list
 
     | CreateNoteResult of Result<NoteId, string>
-
+    | GetTagsResult of MindNotes.Api.Tag list
 let todosApi =
     Remoting.createApi()
     |> Remoting.withRouteBuilder Route.builder
@@ -83,6 +84,9 @@ let NoteRoute = "note"
 let TagRoute = "tag"
 [<Literal>]
 let CreateNoteRoute = "createNote"
+
+[<Literal>]
+let GetTagsRoute = "getTags"
 
 let parseUrl state segments =
     match segments with
@@ -142,6 +146,15 @@ let parseUrl state segments =
             { state with
                 CurrentPage =
                     NotePage InProgress }
+        state, cmd
+    | GetTagsRoute::_ ->
+        let cmd =
+            Cmd.OfAsync.perform todosApi.getTags () GetTagsResult
+
+        let state =
+            { state with
+                CurrentPage =
+                    TagsPage InProgress }
         state, cmd
     | _ ->
         state, Cmd.none
@@ -241,6 +254,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                     | HasNotStartedYet
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
+                | TagsPage(_) -> failwith "Not Implemented"
             let state =
                 { state with
                     CurrentPage = st }
@@ -283,6 +297,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                     | HasNotStartedYet
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
+                | TagsPage(_) -> failwith "Not Implemented"
             let state =
                 { state with
                     CurrentPage = st }
@@ -307,6 +322,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                     | HasNotStartedYet
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
+                | TagsPage(_) -> failwith "Not Implemented"
             let state =
                 { state with
                     CurrentPage = st }
@@ -328,12 +344,18 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                     CurrentPage =
                         NotePage (Resolved (Error errMsg)) }
             state, Cmd.none
+    | GetTagsResult tags ->
+        printfn "%A" tags
+        let state =
+            { state with
+                CurrentPage = TagsPage (Resolved tags) }
+        state, Cmd.none
 open Fable.React
 open Fable.React.Props
 open Fulma
 open Fable.FontAwesome
 
-let navBrand dispatch =
+let navBrand =
     Navbar.Brand.div [ ] [
         Navbar.Item.a [
             Navbar.Item.Props [ Href "https://safe-stack.github.io/" ]
@@ -348,6 +370,11 @@ let navBrand dispatch =
             Navbar.Item.Props [ Href (Router.format CreateNoteRoute) ]
         ] [
             Fa.i [ Fa.Solid.FileAlt ] []
+        ]
+        Navbar.Item.a [
+            Navbar.Item.Props [ Href (Router.format GetTagsRoute) ]
+        ] [
+            Fa.i [ Fa.Solid.Tags ] []
         ]
     ]
 let activatedTagsRender tags =
@@ -501,7 +528,7 @@ let view (state : State) (dispatch : Msg -> unit) =
     ] [
         Hero.head [ ] [
             Navbar.navbar [ ] [
-                Container.container [ ] [ navBrand dispatch ]
+                Container.container [ ] [ navBrand ]
             ]
         ]
 
@@ -718,6 +745,23 @@ let view (state : State) (dispatch : Msg -> unit) =
                             ]
                         | Error errMsg ->
                             p [] [str errMsg]
+                    | HasNotStartedYet -> p [] [str "HasNotStartedYet"]
+                | TagsPage x ->
+                    match x with
+                    | Resolved tags ->
+                        tags
+                        |> List.map (fun tag ->
+                            li [] [
+                                a [Href (Router.format [TagRoute; tag])] [str tag]
+                            ]
+                        )
+                        |> ul []
+                    | InProgress ->
+                        div [ Class ("block " + Fa.Classes.Size.Fa3x) ]
+                            [ Fa.i [ Fa.Solid.Spinner
+                                     Fa.Spin ]
+                                []
+                            ]
                     | HasNotStartedYet -> p [] [str "HasNotStartedYet"]
             Feliz.React.router [
                 router.onUrlChanged (ChangeUrl >> dispatch)
