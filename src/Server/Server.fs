@@ -41,10 +41,12 @@ let getTags () = mail.PostAndReply (fun r -> GetTags r)
 
 let notesFilter pred =
     try
-        let notesPaths = System.IO.Directory.EnumerateFiles notesDir
+        let d = System.IO.DirectoryInfo(notesDir)
+        let notesPaths = d.EnumerateFiles "*"
 
         notesPaths
-        |> Seq.map (fun notePath ->
+        |> Seq.map (fun fi ->
+            let notePath = fi.FullName
             MindNotes.Api.Parser.parseNoteOnFile notePath
             |> Either.map (fun note ->
                 {
@@ -52,6 +54,7 @@ let notesFilter pred =
                     Path = notePath
                     Note = note
                     Html = ""
+                    LastWriteTime = fi.LastWriteTime
                 })
         )
         |> Seq.seqEither
@@ -120,6 +123,7 @@ let getNote id =
                     Path = path
                     Note = note
                     Html = MarkdownConverter.toMarkdown note.Text
+                    LastWriteTime = fi.LastWriteTime
                 }
             )
             |> Result.ofEither
@@ -130,19 +134,35 @@ let getNote id =
                 Note =
                     { DateTime = None; Tags = []; Text = "" }
                 Html = ""
+                LastWriteTime = fi.LastWriteTime
             }
             |> Ok
     else
         Error (sprintf "%s not found" path)
 let setNote (fullNote:FullNote) =
-    try
-        use sw = new System.IO.StreamWriter(fullNote.Path, false)
-        let str = MindNotes.Api.notePrint fullNote.Note
-        sw.Write str
+    let f () =
+        try
+            use sw = new System.IO.StreamWriter(fullNote.Path, false)
+            let str = MindNotes.Api.notePrint fullNote.Note
+            sw.Write str
+            sw.Close()
 
-        { fullNote with Html = MarkdownConverter.toMarkdown fullNote.Note.Text}
-        |> Ok
-    with e -> Error e.Message
+            { fullNote with
+                Html = MarkdownConverter.toMarkdown fullNote.Note.Text
+                LastWriteTime =
+                    System.IO.File.GetLastWriteTime fullNote.Path
+            }
+            |> Ok
+        with e -> Error e.Message
+    let fi = System.IO.FileInfo fullNote.Path
+    if fi.Exists then
+        if fi.LastWriteTime.Ticks - fullNote.LastWriteTime.Ticks < 10000L then
+            f()
+        else
+            Error (sprintf "%A <> %A" fi.LastWriteTime fullNote.LastWriteTime)
+    else
+        f ()
+
 let newNote () =
     let dateTime = System.DateTime.Now
     let id = MindNotes.Api.datetimeFileFormat dateTime
@@ -161,6 +181,7 @@ let newNote () =
             Path = path
             Html = ""
             Note = note
+            LastWriteTime = dateTime
         }
         |> Ok
     with e -> Error e.Message

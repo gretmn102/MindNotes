@@ -12,6 +12,7 @@ type FullNote =
         Path:string
         Note:MindNotes.Api.Note
         Html:string
+        LastWriteTime:System.DateTime
     }
 
 type SearchPattern =
