@@ -12,14 +12,58 @@ type State =
     {
         CurrentTag: string
         IsActive: bool
+        Suggestions: string list
     }
     static member Empty =
         {
             CurrentTag = ""
             IsActive = false
+            Suggestions = []
         }
 
-let inputTags (inputId:string) (state:State) removeTag changeState addTag tags =
+let dropdown state addTag items =
+    Html.div [
+        prop.className [
+            Bulma.DropdownMenu
+        ]
+        if state.IsActive then
+            // Bulma.IsActive
+            prop.style [
+                style.display.block
+            ]
+        prop.custom("id", Bulma.DropdownMenu)
+        prop.custom("role", "menu")
+        prop.children [
+            Html.div [
+                prop.className [
+                    Bulma.DropdownContent
+                ]
+                items
+                |> List.map (fun (tag:string) ->
+                    Html.a [
+                        prop.tabIndex -1 // necessarily prop
+                        prop.className [
+                            Bulma.DropdownItem
+                        ]
+                        prop.children [
+                            Html.text tag
+                        ]
+                        prop.onClick (fun _ ->
+                            let newState =
+                                { state with
+                                    // IsActive = false
+                                    CurrentTag = ""
+                                }
+                            (newState, tag)
+                            |> addTag
+                        )
+                    ]
+                )
+                |> prop.children
+            ]
+        ]
+    ]
+let inputTags (inputId:string) (state:State) removeTag changeState addTag suggestions tags =
     let createTag (name:string) =
         Html.div [
             prop.className [
@@ -118,13 +162,22 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag tags =
                                             x.focus ()
                                 )
                                 if state.IsActive then
-                                    prop.onBlur (fun _ ->
-                                        { state with
-                                            IsActive = false
-                                        }
-                                        |> changeState
+                                    prop.onBlur (fun e ->
+                                        match e.relatedTarget :?> Types.HTMLElement with
+                                        | null ->
+                                            { state with
+                                                IsActive = false
+                                            }
+                                            |> changeState
+                                        | related ->
+                                            if related.classList.contains Bulma.DropdownItem then
+                                                ()
+                                            else
+                                                { state with
+                                                    IsActive = false
+                                                }
+                                                |> changeState
                                     )
-                                    ()
                                 else
                                     prop.onFocus (fun _ ->
                                         { state with
@@ -155,6 +208,10 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag tags =
                                         |> addTag
                                 )
                             ]
+                            match suggestions with
+                            | [] -> ()
+                            | suggestions ->
+                                dropdown state addTag suggestions
                         ]
                     ]
                     Html.div [

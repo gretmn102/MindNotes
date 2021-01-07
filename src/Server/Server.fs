@@ -186,6 +186,16 @@ let newNote () =
         |> Ok
     with e -> Error e.Message
 
+let getSuggestions pattern =
+    let r = System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+    getTags ()
+    |> Set.toSeq
+    |> Seq.filter (fun x ->
+        r.IsMatch x
+    )
+    |> Seq.truncate 10
+    |> List.ofSeq
+
 let api =
     {
         notesFilterByPattern = fun pattern ->
@@ -213,6 +223,7 @@ let api =
             }
         newNote = fun () -> async { return newNote () }
         getTags = fun () -> async { return getTags () |> Set.toList }
+        getSuggestions = fun pattern -> async { return getSuggestions pattern }
     }
 
 let webApp =

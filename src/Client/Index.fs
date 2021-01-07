@@ -49,6 +49,7 @@ type Page =
 type State =
     {
         CurrentPage: Page
+        TagsSuggestions: Deferred<MindNotes.Api.Tag list>
     }
 
 type SearchMsg =
@@ -71,6 +72,8 @@ type Msg =
 
     | CreateNoteResult of Result<NoteId, string>
     | GetTagsResult of MindNotes.Api.Tag list
+    | GetSuggestions of pattern:string
+    | GetSuggestionsResult of MindNotes.Api.Tag list
 let todosApi =
     Remoting.createApi()
     |> Remoting.withRouteBuilder Route.builder
@@ -164,6 +167,7 @@ let init(): State * Cmd<Msg> =
         {
             CurrentPage =
                 SearchPage SearchState.Empty
+            TagsSuggestions = HasNotStartedYet
         }
     Router.currentUrl()
     |> parseUrl state
@@ -345,10 +349,21 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                         NotePage (Resolved (Error errMsg)) }
             state, Cmd.none
     | GetTagsResult tags ->
-        printfn "%A" tags
         let state =
             { state with
                 CurrentPage = TagsPage (Resolved tags) }
+        state, Cmd.none
+    | GetSuggestions pattern ->
+        let cmd =
+            Cmd.OfAsync.perform todosApi.getSuggestions pattern GetSuggestionsResult
+        let state =
+            { state with
+                TagsSuggestions = InProgress }
+        state, cmd
+    | GetSuggestionsResult tags ->
+        let state =
+            { state with
+                TagsSuggestions = Resolved tags }
         state, Cmd.none
 open Fable.React
 open Fable.React.Props
@@ -394,7 +409,7 @@ let activatedTagsRender tags =
         ])
     |> Tag.list []
 
-let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
+let searchBox (searchState : SearchState) tagsSuggestions getSuggestions (dispatch : SearchMsg -> unit) =
     Box.box' [ ] [
         searchState.FilterPattern.Tags
         |> InputTags.inputTags
@@ -414,6 +429,8 @@ let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                 { searchState with InputTagsState = st }
                 |> ChangeSearchPattern
                 |> dispatch
+
+                getSuggestions st.CurrentTag
             )
             (fun (st, tag) ->
                 { searchState with
@@ -433,6 +450,7 @@ let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
                 |> ChangeSearchPattern
                 |> dispatch
             )
+            tagsSuggestions
         Field.div [ Field.HasAddons ] [
             let disabled =
                 System.String.IsNullOrWhiteSpace searchState.FilterPattern.SearchPattern.Pattern
@@ -551,7 +569,14 @@ let view (state : State) (dispatch : Msg -> unit) =
                         ] [
                             Heading.p [ Heading.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ] [ str "SAFE" ]
 
-                            searchBox searchState (SearchMsg >> dispatch)
+                            let getSuggestions pattern =
+                                GetSuggestions pattern
+                                |> dispatch
+                            let tagsSuggestions =
+                                match state.TagsSuggestions with
+                                | Resolved xs -> xs
+                                | _ -> []
+                            searchBox searchState tagsSuggestions getSuggestions (SearchMsg >> dispatch)
                         ]
                     ]
                 | NotePage notePageState ->
@@ -627,6 +652,10 @@ let view (state : State) (dispatch : Msg -> unit) =
                                         div [ DangerouslySetInnerHTML { __html = note.FullNote.Html } ] []
                                     ]
                                 | EditMode editModeState ->
+                                    let tagsSuggestions =
+                                        match state.TagsSuggestions with
+                                        | Resolved xs -> xs
+                                        | _ -> []
                                     editModeState.FullNoteTemp.Note.Tags
                                     |> InputTags.inputTags
                                         "inputTagsId"
@@ -654,6 +683,9 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> EditMode
                                             |> ChangeNotePageMode
                                             |> NoteMsg
+                                            |> dispatch
+
+                                            GetSuggestions st.CurrentTag
                                             |> dispatch
                                         )
                                         (fun (st, tag) ->
@@ -687,7 +719,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> NoteMsg
                                             |> dispatch
                                         )
-
+                                        tagsSuggestions
                                     Textarea.textarea
                                         [ Textarea.DefaultValue editModeState.FullNoteTemp.Note.Text
                                           Textarea.Size IsLarge
