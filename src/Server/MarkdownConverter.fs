@@ -32,17 +32,15 @@ let toMarkdown =
     pipe.UseAutoLinks(opt) |> ignore
 
     pipe.UseCitations() |> ignore
+    pipe.UseFigures() |> ignore
+    pipe.UseFooters() |> ignore
+
+    pipe.UseFootnotes() |> ignore
 
     pipe.UseAutoIdentifiers(Extensions.AutoIdentifiers.AutoIdentifierOptions.AutoLink) |> ignore
 
-    pipe.UseFigures() |> ignore
-
     pipe.UseMediaLinks() |> ignore
 
-    pipe.UseFooters() |> ignore
-    pipe.UseFootnotes() |> ignore
-
-    // let opt = Extensions.Tables.PipeTableOptions()
     pipe.UsePipeTables() |> ignore
 
     pipe.UseGenericAttributes() |> ignore
@@ -52,7 +50,12 @@ let toMarkdown =
     let pipe = pipe.Build()
     fun reader ->
         // let reader = "sdf*sdg* *[](https://www.youtube.com/watch?v=ss0-HGGh9Yo)*"
+        use writer = new System.IO.StringWriter()
+        let render = Renderers.HtmlRenderer(writer)
+        pipe.Setup(render)
+
         let markdig = Markdig.Markdown.Parse(reader, pipe)
+
         let rec f (markdig:Syntax.Block seq) =
             markdig
             |> Seq.iter (function
@@ -87,7 +90,4 @@ let toMarkdown =
             )
         f markdig
 
-        use writer = new System.IO.StringWriter()
-        let x = Renderers.HtmlRenderer(writer)
-        x.Write(markdig)
-        x.Writer.ToString()
+        render.Render(markdig) |> fun x -> x.ToString()
