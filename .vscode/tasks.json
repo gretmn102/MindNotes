@@ -16,7 +16,20 @@
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "JustBundle",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "fake",
+                "build",
+                "-t",
+                "JustBundle"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "FullRun",

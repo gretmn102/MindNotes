@@ -42,10 +42,12 @@ Target.create "Clean" (fun _ -> Shell.cleanDir deployDir)
 
 Target.create "InstallClient" (fun _ -> npm "install" ".")
 
-Target.create "Bundle" (fun _ ->
+let bundle () =
     dotnet (sprintf "publish -c Release -o \"%s\"" deployDir) serverPath
     npm "run build" "."
-)
+
+Target.create "Bundle" (fun _ -> bundle())
+Target.create "JustBundle" (fun _ -> bundle())
 
 Target.create "Azure" (fun _ ->
     let web = webApp {
@@ -73,14 +75,15 @@ Target.create "Run" (fun _ -> run ())
 
 Target.create "JustRun" (fun _ -> run ())
 
-Target.create "RunTests" (fun _ ->
+let runTests () =
     dotnet "build" sharedTestsPath
     [ async { dotnet "watch run" serverTestsPath }
       async { npm "run test:live" "." } ]
     |> Async.Parallel
     |> Async.RunSynchronously
     |> ignore
-)
+Target.create "RunTests" (fun _ -> runTests ())
+Target.create "JustRunTests" (fun _ -> runTests ())
 
 open Fake.Core.TargetOperators
 
