@@ -49,7 +49,7 @@ type Page =
 type State =
     {
         CurrentPage: Page
-        TagsSuggestions: Deferred<MindNotes.Api.Tag list>
+        TagsSuggestions: Deferred<MindNotes.Api.Tag []>
     }
 
 type SearchMsg =
@@ -73,7 +73,7 @@ type Msg =
     | CreateNoteResult of Result<NoteId, string>
     | GetTagsResult of MindNotes.Api.Tag list
     | GetSuggestions of pattern:string
-    | GetSuggestionsResult of MindNotes.Api.Tag list
+    | GetSuggestionsResult of MindNotes.Api.Tag []
 let todosApi =
     Remoting.createApi()
     |> Remoting.withRouteBuilder Route.builder
@@ -358,7 +358,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         if pattern = "" then
             let state =
                 { state with
-                    TagsSuggestions = Resolved [] }
+                    TagsSuggestions = Resolved [||] }
             state, Cmd.none
         else
             let cmd =
@@ -582,7 +582,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                             let tagsSuggestions =
                                 match state.TagsSuggestions with
                                 | Resolved xs -> xs
-                                | _ -> []
+                                | _ -> [||]
                             searchBox searchState tagsSuggestions getSuggestions (SearchMsg >> dispatch)
                         ]
                     ]
@@ -662,7 +662,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                     let tagsSuggestions =
                                         match state.TagsSuggestions with
                                         | Resolved xs -> xs
-                                        | _ -> []
+                                        | _ -> [||]
                                     editModeState.FullNoteTemp.Note.Tags
                                     |> InputTags.inputTags
                                         "inputTagsId"

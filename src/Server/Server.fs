@@ -194,7 +194,7 @@ let getSuggestions pattern =
         r.IsMatch x
     )
     |> Seq.truncate 10
-    |> List.ofSeq
+    |> Array.ofSeq
 
 let api =
     {

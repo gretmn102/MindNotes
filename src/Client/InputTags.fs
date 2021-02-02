@@ -12,14 +12,16 @@ type State =
     {
         CurrentTag: string
         IsActive: bool
+        SelectedTag: int
     }
     static member Empty =
         {
             CurrentTag = ""
             IsActive = false
+            SelectedTag = -1
         }
 
-let dropdown state addTag items =
+let dropdown state addTag changeState items =
     Html.div [
         prop.className [
             Bulma.DropdownMenu
@@ -37,11 +39,56 @@ let dropdown state addTag items =
                     Bulma.DropdownContent
                 ]
                 items
-                |> List.map (fun (tag:string) ->
+                |> Array.mapi (fun i (tag:string) ->
                     Html.a [
+                        let isSelected = state.SelectedTag = i
+                        if isSelected then
+                            prop.ref (fun x ->
+                                if not <| isNull x then
+                                    if state.IsActive then
+                                        let x = x :?> Types.HTMLElement
+                                        x.focus ()
+                            )
+                            // prop.autoFocus true
+                            prop.onKeyDown (fun e ->
+                                match e.key with
+                                | "ArrowDown" ->
+                                    if i + 1 < items.Length then
+                                        { state with
+                                            SelectedTag = i + 1
+                                        }
+                                        |> changeState
+                                    else
+                                        { state with
+                                            SelectedTag = -1
+                                        }
+                                        |> changeState
+                                | "ArrowUp" ->
+                                    if i - 1 < 0 then
+                                        { state with
+                                            SelectedTag = -1
+                                        }
+                                        |> changeState
+                                    else
+                                        { state with
+                                            SelectedTag = i - 1
+                                        }
+                                        |> changeState
+                                | "Enter" ->
+                                    let newState =
+                                        { state with
+                                            CurrentTag = ""
+                                            SelectedTag = -1
+                                        }
+                                    (newState, tag)
+                                    |> addTag
+                                | _ -> ()
+                            )
                         prop.tabIndex -1 // necessarily prop
                         prop.className [
                             Bulma.DropdownItem
+                            if isSelected then
+                                Bulma.IsActive
                         ]
                         prop.children [
                             Html.text tag
@@ -49,8 +96,8 @@ let dropdown state addTag items =
                         prop.onClick (fun _ ->
                             let newState =
                                 { state with
-                                    // IsActive = false
                                     CurrentTag = ""
+                                    SelectedTag = -1
                                 }
                             (newState, tag)
                             |> addTag
@@ -159,7 +206,7 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
                                 ]
                                 prop.ref (fun x ->
                                     if not <| isNull x then
-                                        if state.IsActive then
+                                        if state.IsActive && state.SelectedTag = -1 then
                                             let x = x :?> Types.HTMLElement
                                             x.focus ()
                                 )
@@ -199,7 +246,8 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
 
                                 prop.onKeyDown (fun e ->
                                     if not <| System.String.IsNullOrWhiteSpace state.CurrentTag then
-                                        if e.key = "Enter" then
+                                        match e.key with
+                                        | "Enter" ->
                                             let e = e.target :?> Types.HTMLInputElement
                                             let x = e.parentNode :?> Types.HTMLDivElement
                                             x.classList.remove Bulma.IsActive
@@ -207,15 +255,29 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
                                             let newState =
                                                 { state with
                                                     CurrentTag = ""
+                                                    SelectedTag = -1
                                                 }
                                             (newState, state.CurrentTag)
                                             |> addTag
+                                        | "ArrowDown" ->
+                                            if Array.length suggestions > 0 then
+                                                { state with
+                                                    SelectedTag = 0
+                                                }
+                                                |> changeState
+                                        | "ArrowUp" ->
+                                            { state with
+                                                SelectedTag = suggestions.Length - 1
+                                            }
+                                            |> changeState
+                                        | x ->
+                                            printfn "key: %A" x
                                 )
                             ]
                             match suggestions with
-                            | [] -> ()
+                            | [||] -> ()
                             | suggestions ->
-                                dropdown state addTag suggestions
+                                dropdown state addTag changeState suggestions
                         ]
                     ]
                     Html.div [
@@ -237,6 +299,7 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
                                             { state with
                                                 IsActive = true
                                                 CurrentTag = ""
+                                                SelectedTag = -1
                                             }
                                         (newState, state.CurrentTag)
                                         |> addTag
