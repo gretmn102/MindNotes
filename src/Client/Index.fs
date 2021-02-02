@@ -181,6 +181,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                 { state with
                     CurrentPage =
                         SearchPage value
+                    TagsSuggestions = HasNotStartedYet
                 }
             state, Cmd.none
         | x ->
@@ -354,12 +355,18 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                 CurrentPage = TagsPage (Resolved tags) }
         state, Cmd.none
     | GetSuggestions pattern ->
-        let cmd =
-            Cmd.OfAsync.perform todosApi.getSuggestions pattern GetSuggestionsResult
-        let state =
-            { state with
-                TagsSuggestions = InProgress }
-        state, cmd
+        if pattern = "" then
+            let state =
+                { state with
+                    TagsSuggestions = Resolved [] }
+            state, Cmd.none
+        else
+            let cmd =
+                Cmd.OfAsync.perform todosApi.getSuggestions pattern GetSuggestionsResult
+            let state =
+                { state with
+                    TagsSuggestions = InProgress }
+            state, cmd
     | GetSuggestionsResult tags ->
         let state =
             { state with
@@ -717,6 +724,9 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> EditMode
                                             |> ChangeNotePageMode
                                             |> NoteMsg
+                                            |> dispatch
+
+                                            GetSuggestions ""
                                             |> dispatch
                                         )
                                         tagsSuggestions

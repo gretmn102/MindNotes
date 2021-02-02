@@ -12,13 +12,11 @@ type State =
     {
         CurrentTag: string
         IsActive: bool
-        Suggestions: string list
     }
     static member Empty =
         {
             CurrentTag = ""
             IsActive = false
-            Suggestions = []
         }
 
 let dropdown state addTag items =
@@ -144,7 +142,11 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
                             Html.input [
                                 prop.id inputId
                                 prop.type' "text"
-                                prop.placeholder "Add Tag"
+                                if state.CurrentTag = "" then
+                                    prop.placeholder "Add Tag"
+                                else
+                                    prop.value state.CurrentTag
+
                                 prop.classes [
                                     Bulma.Input
                                     if state.IsActive then
@@ -194,18 +196,20 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
                                     }
                                     |> changeState
                                 )
-                                prop.onKeyDown (fun e ->
-                                    if e.key = "Enter" then
-                                        let e = e.target :?> Types.HTMLInputElement
-                                        let x = e.parentNode :?> Types.HTMLDivElement
-                                        x.classList.remove Bulma.IsActive
 
-                                        let newState =
-                                            { state with
-                                                CurrentTag = ""
-                                            }
-                                        (newState, state.CurrentTag)
-                                        |> addTag
+                                prop.onKeyDown (fun e ->
+                                    if not <| System.String.IsNullOrWhiteSpace state.CurrentTag then
+                                        if e.key = "Enter" then
+                                            let e = e.target :?> Types.HTMLInputElement
+                                            let x = e.parentNode :?> Types.HTMLDivElement
+                                            x.classList.remove Bulma.IsActive
+
+                                            let newState =
+                                                { state with
+                                                    CurrentTag = ""
+                                                }
+                                            (newState, state.CurrentTag)
+                                            |> addTag
                                 )
                             ]
                             match suggestions with
@@ -228,13 +232,14 @@ let inputTags (inputId:string) (state:State) removeTag changeState addTag sugges
                                     style.marginTop (length.em 0.1)
                                 ]
                                 prop.onClick (fun _ ->
-                                    let newState =
-                                        { state with
-                                            IsActive = true
-                                            CurrentTag = ""
-                                        }
-                                    (newState, state.CurrentTag)
-                                    |> addTag
+                                    if not <| System.String.IsNullOrWhiteSpace state.CurrentTag then
+                                        let newState =
+                                            { state with
+                                                IsActive = true
+                                                CurrentTag = ""
+                                            }
+                                        (newState, state.CurrentTag)
+                                        |> addTag
                                 )
                                 prop.children [
                                     Fa.i [ Fa.Solid.Check ] []
