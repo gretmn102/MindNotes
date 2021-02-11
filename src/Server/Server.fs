@@ -162,6 +162,17 @@ let setNote (fullNote:FullNote) =
             Error (sprintf "%A <> %A" fi.LastWriteTime fullNote.LastWriteTime)
     else
         f ()
+let removeNote id =
+    let path = idToPath id
+    let fi = System.IO.FileInfo path
+    if fi.Exists then
+        try
+            fi.Delete()
+            Ok ()
+        with e ->
+            Error e.Message
+    else
+        Error "Note not exist"
 
 let newNote () =
     let dateTime = System.DateTime.Now
@@ -221,6 +232,7 @@ let api =
                     | None -> fullNote
                 return setNote fullNote
             }
+        removeNote = fun id -> async { return removeNote id }
         newNote = fun () -> async { return newNote () }
         getTags = fun () -> async { return getTags () |> Set.toList }
         getSuggestions = fun pattern -> async { return getSuggestions pattern }

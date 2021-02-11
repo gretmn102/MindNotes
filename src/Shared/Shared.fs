@@ -38,6 +38,7 @@ type ITodosApi =
         notesFilterByPattern : FilterPattern -> Async<Result<list<FullNote>,string>>
         getNote : NoteId -> Async<Result<FullNote, string>>
         setNote : FullNote -> Async<Result<FullNote, string>>
+        removeNote : NoteId -> Async<Result<unit, string>>
         newNote : unit -> Async<Result<FullNote, string>>
         getTags : unit -> Async<MindNotes.Api.Tag list>
         getSuggestions : string -> Async<MindNotes.Api.Tag []>

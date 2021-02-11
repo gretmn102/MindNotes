@@ -14,11 +14,17 @@ type SavingState =
     | Saved
     | SavingInProgress
     | SavingError of string
+type RemovingState =
+    | NotRemoved
+    | Removed
+    | RemovingInProgress
+    | RemovingError of string
 type EditModeState =
     {
         FullNoteTemp: FullNote
         SetFullNoteResult: SavingState
         InputTagsState: InputTags.State
+        RemoveResult: RemovingState
     }
 type NotePageMode =
     | ViewMode
@@ -61,6 +67,8 @@ type NoteMsg =
     /// А сам `GetNote` воплощается через Router
     | GetNoteResult of Result<FullNote,string> * editMode:bool
     | SetNote
+    | RemoveNote
+    | RemoveNoteResult of Result<unit, string>
     | SetNoteResult of Result<FullNote, string>
 
     | ChangeNotePageMode of NotePageMode
@@ -228,6 +236,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                     FullNoteTemp = fullNote
                                     SetFullNoteResult = Saved
                                     InputTagsState = InputTags.State.Empty
+                                    RemoveResult = NotRemoved
                                 }
                                 |> EditMode
                             else
@@ -291,6 +300,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                                     { x with
                                                         FullNoteTemp = fullNote
                                                         SetFullNoteResult = Saved
+                                                        RemoveResult = NotRemoved
                                                     }
                                                     |> EditMode
                                             }
@@ -328,6 +338,79 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
                 | TagsPage(_) -> failwith "Not Implemented"
+            let state =
+                { state with
+                    CurrentPage = st }
+            state, cmd
+        | RemoveNote ->
+            let st, cmd =
+                match state.CurrentPage with
+                | NotePage st ->
+                    match st with
+                    | Resolved st ->
+                        let st, cmd =
+                            match st with
+                            | Ok notePageState ->
+                               match notePageState.Mode with
+                               | EditMode x ->
+                                   let st =
+                                        { notePageState with
+                                            Mode =
+                                                EditMode { x with RemoveResult = RemovingInProgress } }
+                                   
+                                   let cmd = Cmd.OfAsync.perform todosApi.removeNote notePageState.FullNote.Id (RemoveNoteResult >> NoteMsg)
+                                   Resolved(Ok st), cmd
+                               | ViewMode -> Resolved(Ok notePageState), Cmd.none
+                            | x ->
+                                Resolved x, Cmd.none
+                        NotePage st, cmd
+                    | x -> NotePage x, Cmd.none
+                | SearchPage(_)
+                | TagsPage(_) as x -> x, Cmd.none
+            let state =
+                { state with
+                    CurrentPage = st }
+            state, cmd
+        | RemoveNoteResult res ->
+            let st, cmd =
+                match state.CurrentPage with
+                | NotePage st ->
+                    match st with
+                    | Resolved st ->
+                        let st, cmd =
+                            match st with
+                            | Ok notePageState ->
+                                match notePageState.Mode with
+                                | EditMode x ->
+                                    let st =
+                                        match res with
+                                        | Error msg ->
+                                            { notePageState with
+                                                Mode =
+                                                    { x with
+                                                        RemoveResult = RemovingError msg
+                                                    }
+                                                    |> EditMode
+                                            }
+                                        | Ok () ->
+                                            { notePageState with
+                                                Mode =
+                                                    { x with
+                                                        RemoveResult = Removed
+                                                        SetFullNoteResult = NotSaved
+                                                    }
+                                                    |> EditMode
+                                            }
+                                    let cmd = Cmd.none
+                                    Resolved(Ok st), cmd
+                                | ViewMode -> 
+                                    Resolved(Ok notePageState), Cmd.none
+                            | Error _ as x ->
+                                Resolved x, Cmd.none
+                        NotePage st, cmd
+                    | x -> NotePage x, Cmd.none
+                | SearchPage(_)
+                | TagsPage(_) as x -> x, Cmd.none 
             let state =
                 { state with
                     CurrentPage = st }
@@ -605,7 +688,11 @@ let view (state : State) (dispatch : Msg -> unit) =
                                         Level.item [] [
                                             Field.div [Field.HasAddons] [
                                                 Control.p [] [
-                                                    Button.button [ Button.IsStatic true; Button.Color IsBlack ] [
+                                                    Button.button [
+                                                        Button.IsStatic true
+                                                        Button.Color IsBlack
+                                                        Button.Props [ TabIndex -1 ]
+                                                    ] [
                                                         match note.FullNote.Note.DateTime with
                                                         | Some dateTime ->
                                                             str (dateTime.ToString("dd.MM.yyyy HH:mm:ss"))
@@ -631,7 +718,8 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                 | None -> ()
                                             ]
                                         ]
-                                        if note.Mode = ViewMode then
+                                        match note.Mode with
+                                        | ViewMode ->
                                             Level.item [] [
                                                 Button.button
                                                     [
@@ -640,6 +728,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                                 FullNoteTemp = note.FullNote
                                                                 SetFullNoteResult = Saved
                                                                 InputTagsState = InputTags.State.Empty
+                                                                RemoveResult = NotRemoved
                                                             }
                                                             |> EditMode
                                                             |> ChangeNotePageMode
@@ -648,6 +737,23 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                         )
                                                     ]
                                                     [ Fa.i [ Fa.Solid.Edit ] [] ]
+                                            ]
+                                        | EditMode editModeState ->
+                                            Level.item [] [
+                                                Button.button
+                                                    [
+                                                        match editModeState.SetFullNoteResult with
+                                                        | Saved ->
+                                                            Button.OnClick (fun _ ->
+                                                                ViewMode
+                                                                |> ChangeNotePageMode
+                                                                |> NoteMsg
+                                                                |> dispatch
+                                                            )
+                                                        | _ ->
+                                                            Button.Disabled true
+                                                    ]
+                                                    [ Fa.i [ Fa.Regular.WindowClose ] [] ]
                                             ]
                                     ]
                                 ]
@@ -733,6 +839,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                     Textarea.textarea
                                         [ Textarea.DefaultValue editModeState.FullNoteTemp.Note.Text
                                           Textarea.Size IsLarge
+                                          Textarea.Props [ Rows 8 ]
                                           Textarea.OnChange (fun x ->
                                             { editModeState with
                                                 FullNoteTemp =
@@ -768,13 +875,13 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                     |> dispatch
                                                 )
                                             ]
-                                            [ str "Save" ]
+                                            [  Fa.i [ Fa.Solid.Save ] [] ]
                                     | Saved ->
                                         Button.button
                                             [
                                                 Button.Disabled true
                                             ]
-                                            [ str "Saved" ]
+                                            [  Fa.i [ Fa.Solid.Save ] [] ]
                                     | SavingInProgress ->
                                         Button.button
                                             [
@@ -792,17 +899,42 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                 )
                                             ]
                                             [ str errMsg ]
-
-                                    Button.button
-                                        [
-                                            Button.OnClick (fun _ ->
-                                                ViewMode
-                                                |> ChangeNotePageMode
-                                                |> NoteMsg
-                                                |> dispatch
-                                            )
-                                        ]
-                                        [ str "Close" ]
+                                    
+                                    match editModeState.RemoveResult with
+                                    | NotRemoved ->
+                                        Button.button
+                                            [
+                                                Button.Color IsDanger
+                                                Button.OnClick (fun _ ->
+                                                    RemoveNote
+                                                    |> NoteMsg
+                                                    |> dispatch
+                                                )
+                                            ]
+                                            [ Fa.i [ Fa.Solid.Recycle ] [] ]
+                                    | Removed ->
+                                        Button.button
+                                            [
+                                                Button.Disabled true
+                                            ]
+                                            [ Fa.i [ Fa.Solid.Recycle ] [] ]
+                                    | RemovingInProgress ->
+                                        Button.button
+                                            [
+                                                Button.IsLoading true
+                                            ]
+                                            []
+                                    | RemovingError errMsg ->
+                                        Button.button
+                                            [
+                                                Button.Color IsDanger
+                                                Button.OnClick (fun _ ->
+                                                    SetNote
+                                                    |> NoteMsg
+                                                    |> dispatch
+                                                )
+                                            ]
+                                            [ str errMsg ]
                             ]
                         | Error errMsg ->
                             p [] [str errMsg]
