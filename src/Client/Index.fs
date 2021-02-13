@@ -29,6 +29,7 @@ type EditModeState =
 type NotePageMode =
     | ViewMode
     | EditMode of EditModeState
+type IdForJump = string
 
 type NotePageState =
     {
@@ -49,7 +50,7 @@ type SearchState =
             InputTagsState = InputTags.State.Empty
         }
 type Page =
-    | NotePage of Result<NotePageState,string> Deferred
+    | NotePage of IdForJump option * Result<NotePageState,string> Deferred
     | SearchPage of SearchState
     | TagsPage of Deferred<MindNotes.Api.Tag list>
 type State =
@@ -118,12 +119,21 @@ let parseUrl state segments =
                 Cmd.OfAsync.perform todosApi.getNote noteId
                     (fun fullNote -> GetNoteResult(fullNote, editMode) |> NoteMsg)
 
-            { state with CurrentPage = NotePage InProgress }, cmd
-        | _ ->
+            { state with CurrentPage = NotePage (None, InProgress) }, cmd
+        | xs ->
+            let idForJump =
+                match xs with
+                | x::_ ->
+                    if x.StartsWith '#' then
+                        Some x
+                    else
+                        None
+                | _ -> None
             let cmd =
                 Cmd.OfAsync.perform todosApi.getNote noteId
                     (fun fullNote -> GetNoteResult(fullNote, false) |> NoteMsg)
-            { state with CurrentPage = NotePage InProgress }, cmd
+            { state with CurrentPage = NotePage (idForJump, InProgress) }, cmd
+
     | TagRoute::tag::_ ->
         let filterPattern =
             {
@@ -156,7 +166,7 @@ let parseUrl state segments =
         let state =
             { state with
                 CurrentPage =
-                    NotePage InProgress }
+                    NotePage (None, InProgress) }
         state, cmd
     | GetTagsRoute::_ ->
         let cmd =
@@ -243,11 +253,15 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                 ViewMode
                     }
                 )
-            { state with CurrentPage = NotePage (Resolved x)}, Cmd.none
+            let idForJump =
+                match state.CurrentPage with
+                | NotePage(idForJump, _) -> idForJump
+                | _ -> None
+            { state with CurrentPage = NotePage (idForJump, Resolved x)}, Cmd.none
         | SetNote ->
             let st, cmd =
                 match state.CurrentPage with
-                | NotePage st ->
+                | NotePage(idForJump, st) ->
                     match st with
                     | Resolved st ->
                         let st, cmd =
@@ -264,7 +278,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                    Resolved(Ok st), cmd
                                | ViewMode -> failwith "Not Implemented"
                             | Error(errorValue) -> failwith "Not Implemented"
-                        NotePage st, cmd
+                        NotePage (idForJump, st), cmd
                     | HasNotStartedYet
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
@@ -276,7 +290,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         | SetNoteResult res ->
             let st, cmd =
                 match state.CurrentPage with
-                | NotePage st ->
+                | NotePage(idForJump, st) ->
                     match st with
                     | Resolved st ->
                         let st, cmd =
@@ -308,7 +322,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                    Resolved(Ok st), cmd
                                | ViewMode -> failwith "Not Implemented"
                             | Error(errorValue) -> failwith "Not Implemented"
-                        NotePage st, cmd
+                        NotePage(idForJump, st), cmd
                     | HasNotStartedYet
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
@@ -320,7 +334,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         | ChangeNotePageMode mode ->
             let st, cmd =
                 match state.CurrentPage with
-                | NotePage st ->
+                | NotePage(idForJump, st) ->
                     match st with
                     | Resolved st ->
                         let st, cmd =
@@ -333,7 +347,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                let cmd = Cmd.none
                                Resolved(Ok st), cmd
                             | Error(errorValue) -> failwith "Not Implemented"
-                        NotePage st, cmd
+                        NotePage(None, st), cmd
                     | HasNotStartedYet
                     | InProgress -> failwith "Not Implemented"
                 | SearchPage(_) -> failwith "Not Implemented"
@@ -345,7 +359,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         | RemoveNote ->
             let st, cmd =
                 match state.CurrentPage with
-                | NotePage st ->
+                | NotePage(idForJump, st) ->
                     match st with
                     | Resolved st ->
                         let st, cmd =
@@ -357,14 +371,14 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                         { notePageState with
                                             Mode =
                                                 EditMode { x with RemoveResult = RemovingInProgress } }
-                                   
+
                                    let cmd = Cmd.OfAsync.perform todosApi.removeNote notePageState.FullNote.Id (RemoveNoteResult >> NoteMsg)
                                    Resolved(Ok st), cmd
                                | ViewMode -> Resolved(Ok notePageState), Cmd.none
                             | x ->
                                 Resolved x, Cmd.none
-                        NotePage st, cmd
-                    | x -> NotePage x, Cmd.none
+                        NotePage(idForJump, st), cmd
+                    | x -> NotePage(idForJump, st), Cmd.none
                 | SearchPage(_)
                 | TagsPage(_) as x -> x, Cmd.none
             let state =
@@ -374,7 +388,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
         | RemoveNoteResult res ->
             let st, cmd =
                 match state.CurrentPage with
-                | NotePage st ->
+                | NotePage(idForJump, st) ->
                     match st with
                     | Resolved st ->
                         let st, cmd =
@@ -403,14 +417,14 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                             }
                                     let cmd = Cmd.none
                                     Resolved(Ok st), cmd
-                                | ViewMode -> 
+                                | ViewMode ->
                                     Resolved(Ok notePageState), Cmd.none
                             | Error _ as x ->
                                 Resolved x, Cmd.none
-                        NotePage st, cmd
-                    | x -> NotePage x, Cmd.none
+                        NotePage(idForJump, st), cmd
+                    | x -> NotePage(idForJump, st), Cmd.none
                 | SearchPage(_)
-                | TagsPage(_) as x -> x, Cmd.none 
+                | TagsPage(_) as x -> x, Cmd.none
             let state =
                 { state with
                     CurrentPage = st }
@@ -430,7 +444,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
             let state =
                 { state with
                     CurrentPage =
-                        NotePage (Resolved (Error errMsg)) }
+                        NotePage (None, Resolved (Error errMsg)) }
             state, Cmd.none
     | GetTagsResult tags ->
         let state =
@@ -669,7 +683,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                             searchBox searchState tagsSuggestions getSuggestions (SearchMsg >> dispatch)
                         ]
                     ]
-                | NotePage notePageState ->
+                | NotePage(idForJump, notePageState) ->
                     match notePageState with
                     | InProgress ->
                         div [ Class ("block " + Fa.Classes.Size.Fa3x) ]
@@ -762,7 +776,22 @@ let view (state : State) (dispatch : Msg -> unit) =
                                     activatedTagsRender note.FullNote.Note.Tags
 
                                     Content.content [] [
-                                        div [ DangerouslySetInnerHTML { __html = note.FullNote.Html } ] []
+                                        div [
+                                            DangerouslySetInnerHTML { __html = note.FullNote.Html }
+                                            match idForJump with
+                                            | Some idForJump ->
+                                                Ref (fun e ->
+                                                    match e with
+                                                    | null -> ()
+                                                    | e ->
+                                                        match e.querySelector idForJump with
+                                                        | null -> ()
+                                                        | e ->
+                                                            let e = e :?> Browser.Types.HTMLElement
+                                                            e.scrollIntoView()
+                                                )
+                                            | None -> ()
+                                        ] []
                                     ]
                                 | EditMode editModeState ->
                                     let tagsSuggestions =
@@ -899,7 +928,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                 )
                                             ]
                                             [ str errMsg ]
-                                    
+
                                     match editModeState.RemoveResult with
                                     | NotRemoved ->
                                         Button.button

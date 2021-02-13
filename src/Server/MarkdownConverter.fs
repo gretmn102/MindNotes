@@ -10,11 +10,13 @@ module UrlParse =
 
     /// `System.DateTime * fragment:string option`
     let parseInternalUrl str =
+        let sharp =
+            skipChar '#' >>. manySatisfy (fun _ -> true)
         let p =
-            pdateTimeFileFormat .>> skipString ".md"
+            pdateTimeFileFormat .>> skipString ".md" |>> Some
             .>>. (optional (skipChar '/')
-                  >>. opt (skipChar '#'
-                           >>. manySatisfy (fun _ -> true)))
+                  >>. opt sharp)
+            <|> ((skipChar '/' >>. sharp) <|> sharp |>> fun x -> None, Some x)
 
         match run p str with
         | Success(res, _, _) -> Right res
@@ -48,13 +50,13 @@ let toMarkdown =
     pipe.UseEmphasisExtras() |> ignore // for ~~strike~~
 
     let pipe = pipe.Build()
-    fun reader ->
+    fun currentNoteId markdown ->
         // let reader = "sdf*sdg* *[](https://www.youtube.com/watch?v=ss0-HGGh9Yo)*"
         use writer = new System.IO.StringWriter()
         let render = Renderers.HtmlRenderer(writer)
         pipe.Setup(render)
 
-        let markdig = Markdig.Markdown.Parse(reader, pipe)
+        let markdig = Markdig.Markdown.Parse(markdown, pipe)
 
         let rec f (markdig:Syntax.Block seq) =
             markdig
@@ -73,9 +75,13 @@ let toMarkdown =
                                         match chapter with
                                         | Some chapter -> "/#" + chapter.Replace("%20", "-")
                                         | None -> ""
+                                    let res =
+                                        match res with
+                                        | Some res -> Shared.MindNotes.Api.datetimeFileFormat res
+                                        | None -> currentNoteId
                                     x.Url <-
                                         sprintf "#/note/%s%s"
-                                            (Shared.MindNotes.Api.datetimeFileFormat res)
+                                            res
                                             chapter
                             | :? Syntax.Inlines.ContainerInline as x ->
                                 f x

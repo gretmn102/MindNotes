@@ -13,12 +13,6 @@ open FsharpMyExtension.Either
 let idToPath (id:Shared.NoteId) = System.IO.Path.Combine(notesDir, id + ".md")
 let pathToId (path:string): Shared.NoteId = System.IO.Path.GetFileNameWithoutExtension path
 
-module Result =
-    open FsharpMyExtension.Either
-    let ofEither = function
-        | Right x -> Ok x
-        | Left x -> Error x
-
 type State =
     | GetTags of AsyncReplyChannel<MindNotes.Api.Tag Set>
     | SetTags of MindNotes.Api.Tag Set
@@ -122,7 +116,7 @@ let getNote id =
                     Id = id
                     Path = path
                     Note = note
-                    Html = MarkdownConverter.toMarkdown note.Text
+                    Html = MarkdownConverter.toMarkdown id note.Text
                     LastWriteTime = fi.LastWriteTime
                 }
             )
@@ -148,7 +142,7 @@ let setNote (fullNote:FullNote) =
             sw.Close()
 
             { fullNote with
-                Html = MarkdownConverter.toMarkdown fullNote.Note.Text
+                Html = MarkdownConverter.toMarkdown fullNote.Id fullNote.Note.Text
                 LastWriteTime =
                     System.IO.File.GetLastWriteTime fullNote.Path
             }

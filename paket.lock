@@ -202,10 +202,10 @@ NUGET
       FSharp.Core (>= 4.3.4)
 GIT
   remote: https://github.com/gretmn102/FsharpMyExtension.git
-     (afae9328f846d67545a142708c4e11055ce6ac8b)
+     (c67ace92c45a46b99e5dfa870a9ceabd8c9cd33a)
       build: build.cmd
       os: windows
-     (afae9328f846d67545a142708c4e11055ce6ac8b)
+     (c67ace92c45a46b99e5dfa870a9ceabd8c9cd33a)
       build: build.sh
       os: mono
 GROUP Build
