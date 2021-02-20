@@ -794,6 +794,14 @@ let view (state : State) (dispatch : Msg -> unit) =
                                         ] []
                                     ]
                                 | EditMode editModeState ->
+                                    match editModeState.SetFullNoteResult with
+                                    | NotSaved ->
+                                        Browser.Dom.window.onbeforeunload <- (fun e ->
+                                            Browser.Dom.window.confirm ()
+                                        )
+                                    | _ ->
+                                        Browser.Dom.window.onbeforeunload <- ignore
+
                                     let tagsSuggestions =
                                         match state.TagsSuggestions with
                                         | Resolved xs -> xs
