@@ -21,7 +21,7 @@ module UrlParse =
         match run p str with
         | Success(res, _, _) -> Right res
         | Failure(errMsg, _, _) -> Left errMsg
-
+/// `currentNoteId -> markdown -> _`
 let toMarkdown =
     let pipe = MarkdownPipelineBuilder()
 
@@ -96,4 +96,36 @@ let toMarkdown =
             )
         f markdig
 
-        render.Render(markdig) |> fun x -> x.ToString()
+        let getTitle () =
+            let toString (xs:Syntax.Inlines.ContainerInline)=
+                xs
+                |> Seq.map (function
+                    | :? Syntax.Inlines.LinkInline as x ->
+                        x
+                        |> Seq.map (function
+                            | :? Syntax.Inlines.EmphasisInline as x ->
+                                x.FirstChild.ToString()
+                            | x -> x.ToString()
+                        )
+                        |> String.concat ""
+                    | x -> x.ToString()
+                    )
+                |> String.concat ""
+
+            let rec getTitle (xs:Syntax.Block list) =
+                match xs with
+                | (:? Syntax.ParagraphBlock as x)::_ ->
+                    Some (x.Inline |> toString)
+                | (:? Syntax.HeadingBlock as x)::_ ->
+                    x.Inline
+                    |> toString
+                    |> Some
+                | _::xs -> getTitle xs
+                | [] -> None
+            markdig |> List.ofSeq
+            |> getTitle
+
+        {|
+            Title = getTitle ()
+            Result = render.Render(markdig) |> fun x -> x.ToString()
+        |}

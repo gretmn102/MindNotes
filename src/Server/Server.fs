@@ -48,6 +48,7 @@ let notesFilter pred =
                     Path = notePath
                     Note = note
                     Html = ""
+                    Title = None
                     LastWriteTime = fi.LastWriteTime
                 })
         )
@@ -112,11 +113,13 @@ let getNote id =
         if fi.Length > 0L then
             MindNotes.Api.Parser.parseNoteOnFile path
             |> Either.map (fun note ->
+                let markdownRender = MarkdownConverter.toMarkdown id note.Text
                 {
                     Id = id
                     Path = path
                     Note = note
-                    Html = MarkdownConverter.toMarkdown id note.Text
+                    Html = markdownRender.Result
+                    Title = markdownRender.Title
                     LastWriteTime = fi.LastWriteTime
                 }
             )
@@ -128,6 +131,7 @@ let getNote id =
                 Note =
                     { DateTime = None; Tags = []; Text = "" }
                 Html = ""
+                Title = None
                 LastWriteTime = fi.LastWriteTime
             }
             |> Ok
@@ -140,9 +144,10 @@ let setNote (fullNote:FullNote) =
             let str = MindNotes.Api.notePrint fullNote.Note
             sw.Write str
             sw.Close()
-
+            let x = MarkdownConverter.toMarkdown fullNote.Id fullNote.Note.Text
             { fullNote with
-                Html = MarkdownConverter.toMarkdown fullNote.Id fullNote.Note.Text
+                Html = x.Result
+                Title = x.Title
                 LastWriteTime =
                     System.IO.File.GetLastWriteTime fullNote.Path
             }
@@ -185,6 +190,7 @@ let newNote () =
             Id = id
             Path = path
             Html = ""
+            Title = None
             Note = note
             LastWriteTime = dateTime
         }

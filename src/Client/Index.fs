@@ -654,6 +654,24 @@ let view (state : State) (dispatch : Msg -> unit) =
                 // Background """linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url("https://unsplash.it/1200/900?random") no-repeat center center fixed"""
                 BackgroundSize "cover"
             ]
+            Ref (fun x ->
+                if isNull x then ()
+                else
+                    match state.CurrentPage with
+                    | NotePage(_, r) ->
+                        match r with
+                        | Resolved(Ok x) ->
+                            x.FullNote.Title
+                            |> Option.iter (fun x ->
+                                Browser.Dom.document.title <- x
+                            )
+                        | _ ->
+                            Browser.Dom.document.title <- "Loading..."
+                    | SearchPage _ ->
+                        Browser.Dom.document.title <- "Search"
+                    | TagsPage _ ->
+                        Browser.Dom.document.title <- "Tags"
+            )
         ]
     ] [
         Hero.head [ ] [

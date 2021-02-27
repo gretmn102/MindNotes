@@ -6,16 +6,15 @@ open Shared
 open Server
 
 let server =
-    testList "Server" [
-        // testCase "Adding valid Todo" <| fun _ ->
-        //     let storage = Storage()
-        //     let validTodo = Todo.create "TODO"
-        //     let expectedResult = Ok ()
-
-        //     let result = storage.AddTodo validTodo
-
-        //     Expect.equal result expectedResult "Result should be ok"
-        //     Expect.contains (storage.GetTodos()) validTodo "Storage should contain new todo"
+    testList "MarkdownConverter.toMarkdown" [
+        testCase "Title from <h>" <| fun _ ->
+            let markdown = "# [sdf*24*](sdf)header"
+            let res = MarkdownConverter.toMarkdown "noteId" markdown
+            Expect.equal res.Title (Some "sdf24header") "Should be 'sdf24header'"
+        testCase "Title from <p>" <| fun _ ->
+            let markdown = "Some title"
+            let res = MarkdownConverter.toMarkdown "noteId" markdown
+            Expect.equal res.Title (Some "Some title") "Should be 'Some title'"
     ]
 
 let all =
