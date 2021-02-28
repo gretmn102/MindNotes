@@ -105,38 +105,6 @@ let notesFilterByPattern (filterPattern:FilterPattern) =
         let note = x.Note
         tagsFilter note && regEx note
     )
-
-let getNote id =
-    let path = idToPath id
-    let fi = System.IO.FileInfo path
-    if fi.Exists then
-        if fi.Length > 0L then
-            MindNotes.Api.Parser.parseNoteOnFile path
-            |> Either.map (fun note ->
-                let markdownRender = MarkdownConverter.toMarkdown id note.Text
-                {
-                    Id = id
-                    Path = path
-                    Note = note
-                    Html = markdownRender.Result
-                    Title = markdownRender.Title
-                    LastWriteTime = fi.LastWriteTime
-                }
-            )
-            |> Result.ofEither
-        else
-            {
-                Id = id
-                Path = path
-                Note =
-                    { DateTime = None; Tags = []; Text = "" }
-                Html = ""
-                Title = None
-                LastWriteTime = fi.LastWriteTime
-            }
-            |> Ok
-    else
-        Error (sprintf "%s not found" path)
 let setNote (fullNote:FullNote) =
     let f () =
         try
@@ -151,16 +119,52 @@ let setNote (fullNote:FullNote) =
                 LastWriteTime =
                     System.IO.File.GetLastWriteTime fullNote.Path
             }
-            |> Ok
-        with e -> Error e.Message
+            |> Right
+        with e -> Left e.Message
     let fi = System.IO.FileInfo fullNote.Path
     if fi.Exists then
         if fi.LastWriteTime.Ticks - fullNote.LastWriteTime.Ticks < 10000L then
             f()
         else
-            Error (sprintf "%A <> %A" fi.LastWriteTime fullNote.LastWriteTime)
+            Left (sprintf "%A <> %A" fi.LastWriteTime fullNote.LastWriteTime)
     else
         f ()
+
+let getNote id =
+    let path = idToPath id
+    let fi = System.IO.FileInfo path
+    if fi.Exists then
+        if fi.Length > 0L then
+            MindNotes.Api.Parser.parseNoteOnFile path
+            |> Either.bind (fun note ->
+                let markdownRender = MarkdownConverter.toMarkdown id note.Text
+                {
+                    Id = id
+                    Path = path
+                    Note =
+                        { note with
+                            Views = note.Views + 1 }
+                    Html = markdownRender.Result
+                    Title = markdownRender.Title
+                    LastWriteTime = fi.LastWriteTime
+                }
+                |> setNote
+            )
+            |> Result.ofEither
+        else
+            {
+                Id = id
+                Path = path
+                Note =
+                    { DateTime = None; Tags = []; Text = ""; Views = 0 }
+                Html = ""
+                Title = None
+                LastWriteTime = fi.LastWriteTime
+            }
+            |> Ok
+    else
+        Error (sprintf "%s not found" path)
+
 let removeNote id =
     let path = idToPath id
     let fi = System.IO.FileInfo path
@@ -181,7 +185,12 @@ let newNote () =
         use fs = System.IO.File.Create path
 
         let note: MindNotes.Api.Note =
-            { Tags = []; DateTime = Some dateTime; Text = "" }
+            {
+                Tags = []
+                DateTime = Some dateTime
+                Text = ""
+                Views = 0
+            }
         let str = MindNotes.Api.notePrint note
         let bytes = System.Text.UTF8Encoding.UTF8.GetBytes str
         fs.Write(bytes, 0, bytes.Length)
@@ -230,7 +239,7 @@ let api =
                                     DateTime = Some (dateTimeUniversal.ToLocalTime()) }
                         }
                     | None -> fullNote
-                return setNote fullNote
+                return setNote fullNote |> Result.ofEither
             }
         removeNote = fun id -> async { return removeNote id }
         newNote = fun () -> async { return newNote () }

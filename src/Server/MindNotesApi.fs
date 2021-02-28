@@ -80,13 +80,14 @@ module Parser =
             let p = pstring "//" >>. skipSpaces'
             (p >>? tags1) <|> (notFollowedBy (pchar '#' >>. satisfy (isAnyOf " \n")) >>. tags1)
             .>> skipNewline
-        pipe3
-            (opt (pdatetimeStrange <|> pdatetime .>> skipNewline))
-            // (opt (opt (pstring "//" >>. skipSpaces') >>? (tags1 .>> skipNewline)))
+        pipe4
+            (opt (pdatetimeStrange <|> pdatetime))
+            (opt (pchar '|' >>. pint32) .>> optional skipNewline)
             (opt tags)
             ptext
-            (fun datetime tags text ->
+            (fun datetime views tags text ->
                 { DateTime = datetime
+                  Views = views |> Option.defaultValue 0
                   Tags = tags |> Option.defaultValue []
                   Text = text })
     let test () =

@@ -473,7 +473,8 @@ open Fable.React
 open Fable.React.Props
 open Fulma
 open Fable.FontAwesome
-
+open Feliz
+open Elmish.HMR.Common
 let navBrand (state:State) =
     Navbar.Brand.div [ ] [
         Navbar.Item.a [
@@ -593,7 +594,7 @@ let searchBox (searchState : SearchState) tagsSuggestions getSuggestions (dispat
                 ]
             ]
         ]
-        Content.content [ ] [
+        div [ ] [
             match searchState.SearchResult with
             | InProgress ->
                 div [ Class ("block " + Fa.Classes.Size.Fa3x) ]
@@ -610,39 +611,61 @@ let searchBox (searchState : SearchState) tagsSuggestions getSuggestions (dispat
                     if List.isEmpty xs then
                         Text.p [] [str "not found"]
                     else
-                        ul [ ] [
-                            for x in xs do
-                                let note = x.Note
-                                li [ ] [
-                                    div [] [
-                                        Button.a [
-                                            Button.Props [ Href (Router.format [NoteRoute; x.Id]) ]
-                                        ] [
-                                            str x.Path
+                        let f (x:FullNote) =
+                            let note = x.Note
+                            [
+                                Level.level [
+                                    Level.Level.Props [
+                                        Style [
+                                            MarginBottom 0
+                                        ]
+                                    ]
+                                ] [
+                                    Level.left [] [
+                                        Level.item [] [
+                                            Field.div [Field.HasAddons] [
+                                                Control.div [] [
+                                                    Button.a [
+                                                        Button.Props [ Href (Router.format [NoteRoute; x.Id]) ]
+                                                    ] [
+                                                        str x.Path
+                                                    ]
+                                                ]
+                                                Control.div [] [
+                                                    match Browser.Navigator.navigator.clipboard with
+                                                    | Some clipboard ->
+                                                        Button.span [
+                                                            Button.OnClick (fun _ ->
+                                                                clipboard.writeText x.Path
+                                                                |> ignore
+                                                            )
+                                                        ] [
+                                                        Fa.span [ Fa.Solid.Clipboard
+                                                                  Fa.FixedWidth
+                                                                ]
+                                                            [ ]
+                                                        ]
+                                                    | None -> ()
+                                                ]
+                                            ]
                                         ]
 
-                                        match Browser.Navigator.navigator.clipboard with
-                                        | Some clipboard ->
-                                            Button.span [
-                                                Button.OnClick (fun _ ->
-                                                    clipboard.writeText x.Path
-                                                    |> ignore
-                                                )
-                                            ] [
-                                            Fa.span [ Fa.Solid.Clipboard
-                                                      Fa.FixedWidth
-                                                    ]
-                                                [ ]
+                                        Level.item [] [
+                                            div [] [
+                                                span [] [ Fa.i [ Fa.Regular.Eye ] [] ]
+                                                span [] [ str (sprintf " %d" note.Views) ]
                                             ]
-                                        | None -> ()
-
-                                        activatedTagsRender note.Tags
-
-                                        str (MindNotes.Api.getShortDscr note)
+                                        ]
                                     ]
-
                                 ]
-                        ]
+                                activatedTagsRender note.Tags
+
+                                str (MindNotes.Api.getShortDscr note)
+                            ]
+                        for x in xs do
+                            Card.card [] [
+                                Card.content [] (f x)
+                            ]
         ]
     ]
 
@@ -716,7 +739,6 @@ let view (state : State) (dispatch : Msg -> unit) =
                                 Level.level [
                                 ] [
                                     Level.left [] [
-
                                         Level.item [] [
                                             Field.div [Field.HasAddons] [
                                                 Control.p [] [
@@ -787,6 +809,12 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                     ]
                                                     [ Fa.i [ Fa.Regular.WindowClose ] [] ]
                                             ]
+                                        Level.item [] [
+                                            div [] [
+                                                span [] [ Fa.i [ Fa.Regular.Eye ] [] ]
+                                                span [] [ str (sprintf " %d" note.FullNote.Note.Views) ]
+                                            ]
+                                        ]
                                     ]
                                 ]
                                 match note.Mode with

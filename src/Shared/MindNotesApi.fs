@@ -1,19 +1,26 @@
 module Shared.MindNotes.Api
 type Tag = string
-type Note = { DateTime:System.DateTime option; Tags:Tag list; Text:string }
+type Note =
+    {
+        DateTime:System.DateTime option
+        Tags:Tag list
+        Text:string
+        Views:int
+    }
 
-let notePrint (x:Note) =
+let notePrint (note:Note) =
     let datetime =
-        x.DateTime
-        |> Option.map (fun x -> x.ToString("dd.MM.yyyy HH:mm:ss") |> sprintf "%s\n")
+        note.DateTime
+        |> Option.map (fun x -> x.ToString("dd.MM.yyyy HH:mm:ss"))
         |> Option.defaultValue ""
+
     let tags =
-        match x.Tags with
+        match note.Tags with
         | [] -> ""
         | xs ->
             xs |> List.map (sprintf "#%s")
             |> String.concat " " |> sprintf "%s\n"
-    sprintf "%s%s%s" datetime tags (x.Text.TrimEnd())
+    sprintf "%s|%d\n%s%s" datetime note.Views tags (note.Text.TrimEnd())
 let notesPrint =
     List.map notePrint >> String.concat "\n***\n"
 
