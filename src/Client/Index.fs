@@ -816,6 +816,23 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             ]
                                         ]
                                     ]
+                                    Level.right [] [
+                                        Level.item [] [
+                                            Field.div [] [
+                                                Field.label [] [ str "Last write time:" ]
+                                                Field.body [] [
+                                                    Button.button [
+                                                        Button.IsStatic true
+                                                        Button.Color IsBlack
+                                                        Button.Props [ TabIndex -1 ]
+                                                    ] [
+                                                        let dateTime = note.FullNote.LastWriteTime
+                                                        str (dateTime.ToString("dd.MM.yyyy HH:mm:ss"))
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
                                 ]
                                 match note.Mode with
                                 | ViewMode ->
