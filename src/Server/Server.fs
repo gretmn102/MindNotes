@@ -313,7 +313,43 @@ let newNote () =
 
 let getSuggestions pattern =
     let r = System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-    getTags ()
+    let tags =
+        let tags = getTags ()
+        if Map.isEmpty tags then
+            let tags =
+                let d = System.IO.DirectoryInfo(notesDir)
+                if d.Exists then
+                    let noteFiles = d.EnumerateFiles "*"
+
+                    parseNotes noteFiles
+                    |> Seq.fold
+                        (fun st note ->
+                            match note with
+                            | Right note ->
+                                let st =
+                                    note.Note.Tags
+                                    |> List.fold
+                                        (fun st tag ->
+                                            st
+                                            |> Map.addOrModWith
+                                                tag
+                                                (fun () -> Set.singleton note.Id)
+                                                (Set.add note.Id)
+                                        )
+                                        st
+                                st
+                            | Left errMsg -> st
+                        )
+                        Map.empty
+                else
+                    Map.empty
+
+            setTags tags
+            tags
+        else
+            tags
+
+    tags
     |> Seq.choose (fun (KeyValue(tag, _)) ->
         if r.IsMatch tag then
             Some tag
