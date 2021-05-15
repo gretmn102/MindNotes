@@ -953,17 +953,23 @@ let view (state : State) (dispatch : Msg -> unit) =
                                             |> NoteMsg
                                             |> dispatch
                                           )
-                                          match editModeState.SetFullNoteResult with
-                                          | NotSaved | SavingError _ ->
-                                                Textarea.Props [
-                                                    OnKeyDown (fun e ->
-                                                        if e.ctrlKey && e.key = "Enter" then
-                                                            SetNote
-                                                            |> NoteMsg
-                                                            |> dispatch
-                                                    )
-                                                ]
-                                          | Saved | SavingInProgress -> ()
+                                          Textarea.Props [
+                                              OnKeyDown (fun e ->
+                                                  let key =
+                                                      // Why just not use `e.key`?
+                                                      System.Convert.ToChar(e.which)
+                                                      |> System.Char.ToLower
+                                                  if e.ctrlKey && key = 's' then
+                                                      e.preventDefault()
+
+                                                      match editModeState.SetFullNoteResult with
+                                                      | NotSaved | SavingError _ ->
+                                                          SetNote
+                                                          |> NoteMsg
+                                                          |> dispatch
+                                                      | Saved | SavingInProgress -> ()
+                                              )
+                                          ]
                                         ] []
                                     match editModeState.SetFullNoteResult with
                                     | NotSaved ->
