@@ -474,22 +474,43 @@ open Fable.React.Props
 open Fulma
 open Fable.FontAwesome
 open Feliz
-open Elmish.HMR.Common
+
 let navBrand (state:State) =
     Navbar.Brand.div [ ] [
+        let isNoteSaved =
+            match state.CurrentPage with
+            | NotePage(_, s) ->
+                match s with
+                | Resolved (Ok x) ->
+                    match x.Mode with
+                    | EditMode x ->
+                        match x.SetFullNoteResult with
+                        | NotSaved -> false
+                        | Saved -> true
+                        | SavingInProgress -> false
+                        | SavingError(_) -> true
+                    | _ -> true
+                | _ -> true
+            | _ -> true
+
         Navbar.Item.a [
             let isSearchPage =
                 match state.CurrentPage with
                 | SearchPage _ -> true
                 | _ -> false
             Navbar.Item.IsActive isSearchPage
-            if not isSearchPage then
-                Navbar.Item.Props [ Href (Router.format "") ]
+            Navbar.Item.Props [
+                if not isSearchPage && isNoteSaved then
+                    Href (Router.format "")
+            ]
         ] [
             Fa.i [ Fa.Solid.Search ] []
         ]
         Navbar.Item.a [
-            Navbar.Item.Props [ Href (Router.format CreateNoteRoute) ]
+            Navbar.Item.Props [
+                if isNoteSaved then
+                    Href (Router.format CreateNoteRoute)
+            ]
         ] [
             Fa.i [ Fa.Solid.FileAlt ] []
         ]
@@ -499,8 +520,10 @@ let navBrand (state:State) =
                 | TagsPage _ -> true
                 | _ -> false
             Navbar.Item.IsActive isActive
-            if not isActive then
-                Navbar.Item.Props [ Href (Router.format GetTagsRoute) ]
+            Navbar.Item.Props [
+                if not isActive && isNoteSaved then
+                    Href (Router.format GetTagsRoute)
+            ]
         ] [
             Fa.i [ Fa.Solid.Tags ] []
         ]
