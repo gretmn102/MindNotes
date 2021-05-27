@@ -30,6 +30,25 @@ type TagsState =
             NoteIds = Map.empty
         }
 
+let parseNotes (noteFiles:seq<System.IO.FileInfo>) =
+    noteFiles
+    |> Seq.map (fun fi ->
+        let notePath = fi.FullName
+        try
+            MindNotes.Api.Parser.parseNoteOnFile notePath
+            |> Either.map (fun note ->
+                {
+                    Id = pathToId notePath
+                    Path = notePath
+                    Note = note
+                    Html = ""
+                    Title = None
+                    LastWriteTime = fi.LastWriteTime
+                })
+        with e ->
+            Left e.Message
+    )
+
 let mail =
     MailboxProcessor.Start (fun r ->
         let rec loop (state:TagsState) =
@@ -37,8 +56,40 @@ let mail =
                 let! m = r.Receive()
                 match m with
                 | GetTags r ->
-                    r.Reply state.Tags
-                    return! loop state
+                    let tags =
+                        if Map.isEmpty state.Tags then
+                            let tags =
+                                let d = System.IO.DirectoryInfo(notesDir)
+                                if d.Exists then
+                                    let noteFiles = d.EnumerateFiles "*"
+
+                                    parseNotes noteFiles
+                                    |> Seq.fold
+                                        (fun st note ->
+                                            match note with
+                                            | Right note ->
+                                                let st =
+                                                    note.Note.Tags
+                                                    |> List.fold
+                                                        (fun st tag ->
+                                                            st
+                                                            |> Map.addOrModWith
+                                                                tag
+                                                                (fun () -> Set.singleton note.Id)
+                                                                (Set.add note.Id)
+                                                        )
+                                                        st
+                                                st
+                                            | Left errMsg -> st
+                                        )
+                                        Map.empty
+                                else
+                                    Map.empty
+                            tags
+                        else
+                            state.Tags
+                    r.Reply tags
+                    return! loop { state with Tags = tags }
                 | SetTags xs ->
                     let state =
                         {
@@ -114,26 +165,6 @@ let mail =
 let setTags xs = mail.Post (SetTags xs)
 let getTags () = mail.PostAndReply (fun r -> GetTags r)
 let updateTags(noteId, tags) = mail.Post (UpdateTagsFor(noteId, tags))
-
-
-let parseNotes (noteFiles:seq<System.IO.FileInfo>) =
-    noteFiles
-    |> Seq.map (fun fi ->
-        let notePath = fi.FullName
-        try
-            MindNotes.Api.Parser.parseNoteOnFile notePath
-            |> Either.map (fun note ->
-                {
-                    Id = pathToId notePath
-                    Path = notePath
-                    Note = note
-                    Html = ""
-                    Title = None
-                    LastWriteTime = fi.LastWriteTime
-                })
-        with e ->
-            Left e.Message
-    )
 
 let notesFilter pred =
     try
@@ -313,41 +344,7 @@ let newNote () =
 
 let getSuggestions pattern =
     let r = System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-    let tags =
-        let tags = getTags ()
-        if Map.isEmpty tags then
-            let tags =
-                let d = System.IO.DirectoryInfo(notesDir)
-                if d.Exists then
-                    let noteFiles = d.EnumerateFiles "*"
-
-                    parseNotes noteFiles
-                    |> Seq.fold
-                        (fun st note ->
-                            match note with
-                            | Right note ->
-                                let st =
-                                    note.Note.Tags
-                                    |> List.fold
-                                        (fun st tag ->
-                                            st
-                                            |> Map.addOrModWith
-                                                tag
-                                                (fun () -> Set.singleton note.Id)
-                                                (Set.add note.Id)
-                                        )
-                                        st
-                                st
-                            | Left errMsg -> st
-                        )
-                        Map.empty
-                else
-                    Map.empty
-
-            setTags tags
-            tags
-        else
-            tags
+    let tags = getTags ()
 
     tags
     |> Seq.choose (fun (KeyValue(tag, _)) ->
