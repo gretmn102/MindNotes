@@ -13,6 +13,7 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Shared\Shared.fsproj" />
+        <ProjectReference Include="..\..\paket-files\github.com\gretmn102\FulmaExtensions\src\FulmaExtensions.fsproj" />
     </ItemGroup>
     <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

@@ -284,7 +284,6 @@ let getNote id =
                 }
                 |> setNote
             )
-            |> Result.ofEither
         else
             updateTags(id, Set.empty)
 
@@ -297,9 +296,9 @@ let getNote id =
                 Title = None
                 LastWriteTime = fi.LastWriteTime
             }
-            |> Ok
+            |> Right
     else
-        Error (sprintf "%s not found" path)
+        Left (sprintf "%s not found" path)
 
 let removeNote id =
     let path = idToPath id
@@ -405,7 +404,7 @@ let api =
             }
         getNote = fun id ->
             async {
-                return getNote id
+                return getNote id |> Result.ofEither
             }
         setNote = fun fullNote ->
             async {
@@ -428,8 +427,42 @@ let api =
                 let tags =
                     getTags ()
                     |> Seq.map (fun (KeyValue(k, v)) -> k)
-                    |> List.ofSeq
+                    |> Array.ofSeq
                 return tags
+            }
+        renameTag = fun (targetTag, destinationTag) ->
+            async {
+                let res =
+                    match Map.tryFind targetTag (getTags ()) with
+                    | Some noteIds ->
+                        noteIds
+                        |> Seq.map (fun noteId ->
+                            getNote noteId
+                            |> Either.bind (fun fullNote ->
+                                { fullNote with
+                                    Note =
+                                        let note = fullNote.Note
+                                        { note with
+                                            Tags =
+                                                let filter tags =
+                                                    tags
+                                                    |> List.filter (fun x ->
+                                                        not (x = targetTag
+                                                             || x = destinationTag)) // to avoid duplicates
+                                                // let targetTag = "рыба"
+                                                // let destinationTag = "масло"
+                                                // let tags = [ "рыба"; "мясо" ]
+                                                // filter tags = ["мясо"]
+
+                                                destinationTag :: filter note.Tags
+                                        }
+                                }
+                                |> setNote
+                            )
+                        )
+                        |> List.ofSeq
+                    | None -> [Left "not found target tag '%s'"]
+                return res |> List.map Result.ofEither
             }
         getSuggestions = fun pattern -> async { return getSuggestions pattern }
     }

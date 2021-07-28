@@ -201,11 +201,13 @@ NUGET
     Zanaptak.TypedCssClasses (0.4)
       FSharp.Core (>= 4.3.4)
 GIT
+  remote: https://github.com/gretmn102/FulmaExtensions.git
+     (5431be2bebdfba7d7599848e70c06d81cb10111b)
   remote: https://github.com/gretmn102/FsharpMyExtension.git
-     (c67ace92c45a46b99e5dfa870a9ceabd8c9cd33a)
+     (2b4ccb04b0e01a0402605868b59f62db10326916)
       build: build.cmd
       os: windows
-     (c67ace92c45a46b99e5dfa870a9ceabd8c9cd33a)
+     (2b4ccb04b0e01a0402605868b59f62db10326916)
       build: build.sh
       os: mono
 GROUP Build
