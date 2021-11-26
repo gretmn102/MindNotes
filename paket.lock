@@ -6,9 +6,9 @@ NUGET
       FSharp.Core (>= 4.6)
       Mono.Cecil (>= 0.11.2)
     Fable.AST (3.0)
-    Fable.Browser.Blob (1.1)
+    Fable.Browser.Blob (1.1.4)
       Fable.Core (>= 3.0)
-      FSharp.Core (>= 4.6.2)
+      FSharp.Core (>= 4.7.2)
     Fable.Browser.Dom (2.2)
       Fable.Browser.Blob (>= 1.1)
       Fable.Browser.Event (>= 1.2.1)
@@ -45,8 +45,7 @@ NUGET
       Fable.Browser.Event (>= 1.2.1)
       Fable.Core (>= 3.0)
       FSharp.Core (>= 4.7)
-    Fable.Core (3.2.1)
-      FSharp.Core (>= 4.7.2)
+    Fable.Core (3.6)
     Fable.Elmish (3.1)
       Fable.Core (>= 3.0)
       FSharp.Core (>= 4.6.2)
@@ -139,6 +138,10 @@ NUGET
     Fulma (2.10)
       Fable.Core (>= 3.0)
       Fable.React (>= 5.1)
+    Fulma.Extensions.Wikiki.Checkradio (2.0.1)
+      Fable.Core (>= 3.0)
+      Fable.React (>= 5.1)
+      Fulma (>= 2.1.1)
     Giraffe (4.1)
       FSharp.Core (>= 4.7)
       Microsoft.IO.RecyclableMemoryStream (>= 1.2.2)
@@ -202,12 +205,12 @@ NUGET
       FSharp.Core (>= 4.3.4)
 GIT
   remote: https://github.com/gretmn102/FulmaExtensions.git
-     (5431be2bebdfba7d7599848e70c06d81cb10111b)
+     (2fa6b8a225e2f24eaf296c87277ccb6c26087fcf)
   remote: https://github.com/gretmn102/FsharpMyExtension.git
-     (2b4ccb04b0e01a0402605868b59f62db10326916)
+     (9a4e9268ae7314b49f1f8438db0b71de71ef5657)
       build: build.cmd
       os: windows
-     (2b4ccb04b0e01a0402605868b59f62db10326916)
+     (9a4e9268ae7314b49f1f8438db0b71de71ef5657)
       build: build.sh
       os: mono
 GROUP Build

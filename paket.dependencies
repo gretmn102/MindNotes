@@ -18,6 +18,7 @@ nuget Fable.Mocha
 nuget Fable.React
 nuget Fable.Remoting.Client
 nuget Fulma
+nuget Fulma.Extensions.Wikiki.Checkradio
 git https://github.com/gretmn102/FulmaExtensions.git
 
 nuget Fable.Browser.Navigator

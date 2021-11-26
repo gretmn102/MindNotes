@@ -192,6 +192,8 @@ module TagRename =
                 ]
             | InProgress -> spinner
 
+open Fulma.Extensions
+
 type SavingState =
     | NotSaved
     | Saved
@@ -223,29 +225,32 @@ type NotePageState =
 type SearchState =
     {
         SearchResult: Result<FullNote list,string> Deferred
-        FilterPattern: FilterPattern
+        SearchPattern: SearchPattern
         InputTagsState: InputTags.State
     }
-    static member Empty =
+    static member Init tags =
         {
             SearchResult = HasNotStartedYet
-            FilterPattern = FilterPattern.Empty
-            InputTagsState = InputTags.State.Empty
+            SearchPattern = SearchPattern.Empty
+            InputTagsState = InputTags.init tags
         }
+
 type Page =
     | NotePage of IdForJump option * Result<NotePageState,string> Deferred
     | SearchPage of SearchState
     | TagsPage of Deferred<TagRename.State []>
+
 type State =
     {
         CurrentPage: Page
-        TagsSuggestions: Deferred<MindNotes.Api.Tag []>
     }
 
 type SearchMsg =
-    | ChangeSearchPattern of SearchState
+    | SetSearchPattern of string
     | Search
     | SearchResult of Result<FullNote list,string>
+    | InputSearchMsg of InputTags.Msg
+
 type NoteId = string
 type NoteMsg =
     /// А сам `GetNote` воплощается через Router
@@ -256,6 +261,7 @@ type NoteMsg =
     | SetNoteResult of Result<FullNote, string>
 
     | ChangeNotePageMode of NotePageMode
+    | ChangeNotePageTags of InputTags.Msg
 
 type Msg =
     | SearchMsg of SearchMsg
@@ -264,10 +270,26 @@ type Msg =
 
     | CreateNoteResult of Result<NoteId, string>
     | GetTagsResult of MindNotes.Api.Tag []
-    | GetSuggestions of pattern:string
-    | GetSuggestionsResult of MindNotes.Api.Tag []
 
     | TagRenameMsg of int * TagRename.Msg
+
+let search (searchState: SearchState) =
+    let filterPattern =
+        {
+            SearchPattern = searchState.SearchPattern
+            Tags = searchState.InputTagsState.InputTagsState.Tags
+        }
+    let cmd =
+        Cmd.OfAsync.perform todosApi.notesFilterByPattern
+            filterPattern
+            (SearchResult >> SearchMsg)
+
+    let searchState =
+        { searchState with
+            SearchResult = InProgress
+        }
+
+    searchState, cmd
 
 let parseUrl state segments =
     match segments with
@@ -275,7 +297,8 @@ let parseUrl state segments =
         let searchState =
             match state.CurrentPage with
             | SearchPage searchState -> searchState
-            | _ -> SearchState.Empty
+            | _ -> SearchState.Init []
+
         { state with CurrentPage = SearchPage searchState}, Cmd.none
     | NoteRoute::noteId::query ->
         match query with
@@ -304,26 +327,15 @@ let parseUrl state segments =
             { state with CurrentPage = NotePage (idForJump, InProgress) }, cmd
 
     | TagRoute::tag::_ ->
-        let filterPattern =
-            {
-                SearchPattern = SearchPattern.Empty
-                Tags = [tag]
-            }
-        let cmd =
-            Cmd.OfAsync.perform todosApi.notesFilterByPattern
-                filterPattern
-                (SearchResult >> SearchMsg)
+        let searchState = SearchState.Init [tag]
+        let searchState, cmd = search searchState
         let state =
             { state with
                 CurrentPage =
-                    SearchPage
-                        {
-                            FilterPattern = filterPattern
-                            SearchResult = InProgress
-                            InputTagsState = InputTags.State.Empty
-                        }
+                    SearchPage searchState
             }
         state, cmd
+
     | CreateNoteRoute::_ ->
         let cmd =
             Cmd.OfAsync.perform todosApi.newNote ()
@@ -349,12 +361,11 @@ let parseUrl state segments =
     | _ ->
         state, Cmd.none
 
-let init(): State * Cmd<Msg> =
+let init (): State * Cmd<Msg> =
     let state =
         {
             CurrentPage =
-                SearchPage SearchState.Empty
-            TagsSuggestions = HasNotStartedYet
+                SearchPage (SearchState.Init [])
         }
     Router.currentUrl()
     |> parseUrl state
@@ -362,43 +373,56 @@ let init(): State * Cmd<Msg> =
 let update (msg: Msg) (state: State): State * Cmd<Msg> =
     match msg with
     | SearchMsg x ->
-        match x with
-        | ChangeSearchPattern value ->
-            let state =
-                { state with
-                    CurrentPage =
-                        SearchPage value
-                    TagsSuggestions = HasNotStartedYet
-                }
-            state, Cmd.none
-        | x ->
-            match state.CurrentPage with
-            | SearchPage searchPageState ->
-                match x with
-                | Search ->
-                    let cmd =
-                        Cmd.OfAsync.perform todosApi.notesFilterByPattern
-                            searchPageState.FilterPattern
-                            (SearchResult >> SearchMsg)
-                    let state =
-                        { state with
-                            CurrentPage =
-                                SearchPage
-                                    { searchPageState with
-                                        SearchResult = InProgress
-                                    }
-                        }
-                    state, cmd
-                | SearchResult searchResult ->
-                    let state =
-                        { state with
-                            CurrentPage =
-                                SearchPage
-                                    { searchPageState with
-                                        SearchResult = Resolved searchResult }}
-                    state, Cmd.none
-                | ChangeSearchPattern(_) -> failwith "Not Implemented"
-            | x -> failwithf "expected SearchPage, but %A" x
+        match state.CurrentPage with
+        | SearchPage searchPageState ->
+            match x with
+            | InputSearchMsg msg ->
+                let state', cmd =
+                    InputTags.update
+                        todosApi.getSuggestions
+                        msg
+                        searchPageState.InputTagsState
+
+                let state =
+                    { state with
+                        CurrentPage =
+                            SearchPage
+                                { searchPageState with
+                                    InputTagsState = state'
+                                }
+                    }
+                state, Cmd.map (InputSearchMsg >> SearchMsg) cmd
+            | SetSearchPattern value ->
+                let state =
+                    { state with
+                        CurrentPage =
+                            SearchPage
+                                { searchPageState with
+                                    SearchPattern =
+                                        { searchPageState.SearchPattern with
+                                            Pattern = value
+                                        }
+                                }
+                    }
+                state, Cmd.none
+            | Search ->
+                let searchState, cmd = search searchPageState
+
+                let state =
+                    { state with
+                        CurrentPage = SearchPage searchState
+                    }
+                state, cmd
+            | SearchResult searchResult ->
+                let state =
+                    { state with
+                        CurrentPage =
+                            SearchPage
+                                { searchPageState with
+                                    SearchResult = Resolved searchResult }}
+                state, Cmd.none
+        | x -> failwithf "expected SearchPage, but %A" x
+
     | ChangeUrl segments ->
         parseUrl state segments
     | NoteMsg x ->
@@ -414,7 +438,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                                 {
                                     FullNoteTemp = fullNote
                                     SetFullNoteResult = Saved
-                                    InputTagsState = InputTags.State.Empty
+                                    InputTagsState = InputTags.init fullNote.Note.Tags
                                     RemoveResult = NotRemoved
                                 }
                                 |> EditMode
@@ -436,16 +460,28 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                         let st, cmd =
                             match st with
                             | Ok notePageState ->
-                               match notePageState.Mode with
-                               | EditMode x ->
-                                   let st =
+                                match notePageState.Mode with
+                                | EditMode x ->
+                                    let fullNoteTemp =
+                                        { x.FullNoteTemp with
+                                            Note =
+                                                { x.FullNoteTemp.Note with
+                                                    Tags = x.InputTagsState.InputTagsState.Tags
+                                                }
+                                        }
+
+                                    let st =
                                         { notePageState with
                                             Mode =
-                                                EditMode { x with SetFullNoteResult = SavingInProgress } }
+                                                EditMode
+                                                    { x with
+                                                        FullNoteTemp = fullNoteTemp
+                                                        SetFullNoteResult = SavingInProgress }
+                                        }
 
-                                   let cmd = Cmd.OfAsync.perform todosApi.setNote x.FullNoteTemp (SetNoteResult >> NoteMsg)
-                                   Resolved(Ok st), cmd
-                               | ViewMode -> failwith "Not Implemented"
+                                    let cmd = Cmd.OfAsync.perform todosApi.setNote fullNoteTemp (SetNoteResult >> NoteMsg)
+                                    Resolved(Ok st), cmd
+                                | ViewMode -> failwith "Not Implemented"
                             | Error(errorValue) -> failwith "Not Implemented"
                         NotePage (idForJump, st), cmd
                     | HasNotStartedYet
@@ -598,6 +634,68 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
                 { state with
                     CurrentPage = st }
             state, cmd
+
+        | ChangeNotePageTags msg ->
+            let st, cmd =
+                match state.CurrentPage with
+                | NotePage(idForJump, st) ->
+                    match st with
+                    | Resolved st ->
+                        let st, cmd =
+                            match st with
+                            | Ok notePageState ->
+                                match notePageState.Mode with
+                                | EditMode x ->
+                                    let normalizeTag =
+                                        String.collect
+                                            (function
+                                             | ' ' -> "_"
+                                             | '#' -> ""
+                                             | x -> string x)
+
+                                    let msg =
+                                        match msg with
+                                        | InputTags.SetInputTagsState state ->
+                                            InputTags.SetInputTagsState
+                                                { state with
+                                                    CurrentTag =
+                                                        normalizeTag state.CurrentTag
+                                                }
+                                        | x -> x
+
+                                    let state', cmd =
+                                        InputTags.update
+                                            todosApi.getSuggestions
+                                            msg
+                                            x.InputTagsState
+
+                                    let state =
+                                        { notePageState with
+                                            Mode =
+                                                EditMode
+                                                    { x with
+                                                        SetFullNoteResult = NotSaved
+                                                        InputTagsState = state'
+                                                    }
+                                        }
+
+                                    let cmd =
+                                        Cmd.map (ChangeNotePageTags >> NoteMsg) cmd
+
+                                    Resolved(Ok state), cmd
+                                | ViewMode ->
+                                    Resolved(Ok notePageState), Cmd.none
+                            | Error _ as x ->
+                                Resolved x, Cmd.none
+                        NotePage(idForJump, st), cmd
+                    | x -> NotePage(idForJump, st), Cmd.none
+                | SearchPage(_)
+                | TagsPage(_) as x -> x, Cmd.none
+            let state =
+                { state with
+                    CurrentPage = st }
+            state, cmd
+
     | CreateNoteResult noteIdResult ->
         match noteIdResult with
         | Ok noteId ->
@@ -623,24 +721,6 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
             { state with
                 CurrentPage = TagsPage (Resolved tags) }
         state, Cmd.none
-    | GetSuggestions pattern ->
-        if pattern = "" then
-            let state =
-                { state with
-                    TagsSuggestions = Resolved [||] }
-            state, Cmd.none
-        else
-            let cmd =
-                Cmd.OfAsync.perform todosApi.getSuggestions pattern GetSuggestionsResult
-            let state =
-                { state with
-                    TagsSuggestions = InProgress }
-            state, cmd
-    | GetSuggestionsResult tags ->
-        let state =
-            { state with
-                TagsSuggestions = Resolved tags }
-        state, Cmd.none
     | TagRenameMsg(idx, msg) ->
         match state.CurrentPage with
         | TagsPage (Resolved tags) ->
@@ -655,6 +735,7 @@ let update (msg: Msg) (state: State): State * Cmd<Msg> =
             let cmd = Cmd.map (fun msg -> TagRenameMsg (idx, msg)) cmd
             state, cmd
         | _ -> state, Cmd.none
+
 open Fable.React
 open Fable.React.Props
 open Fulma
@@ -723,66 +804,21 @@ let activatedTagsRender tags =
         ])
     |> Tag.list []
 
-let searchBox (searchState : SearchState) tagsSuggestions getSuggestions (dispatch : SearchMsg -> unit) =
+let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
     Box.box' [ ] [
-        searchState.FilterPattern.Tags
-        |> InputTags.inputTags
-            "inputTagsId"
-            searchState.InputTagsState
-            (fun tag ->
-                { searchState with
-                    FilterPattern =
-                        { searchState.FilterPattern with
-                            Tags = searchState.FilterPattern.Tags |> List.filter ((<>) tag)
-                        }
-                }
-                |> ChangeSearchPattern
-                |> dispatch
-            )
-            (fun st ->
-                { searchState with InputTagsState = st }
-                |> ChangeSearchPattern
-                |> dispatch
+        InputTags.view searchState.InputTagsState (InputSearchMsg >> dispatch)
 
-                getSuggestions st.CurrentTag
-            )
-            (fun (st, tag) ->
-                { searchState with
-                    InputTagsState = st
-                    FilterPattern =
-                        { searchState.FilterPattern with
-                            Tags =
-                                List.foldBack
-                                    (fun x st ->
-                                        if x = tag then st
-                                        else x::st
-                                    )
-                                    searchState.FilterPattern.Tags
-                                    [tag]
-                        }
-                }
-                |> ChangeSearchPattern
-                |> dispatch
-            )
-            tagsSuggestions
         Field.div [ Field.HasAddons ] [
             let disabled =
-                System.String.IsNullOrWhiteSpace searchState.FilterPattern.SearchPattern.Pattern
-                && List.isEmpty searchState.FilterPattern.Tags
+                System.String.IsNullOrWhiteSpace searchState.SearchPattern.Pattern
+                && List.isEmpty searchState.InputTagsState.InputTagsState.Tags
+
             Control.p [ Control.IsExpanded ] [
                 Input.text [
-                    Input.Value searchState.FilterPattern.SearchPattern.Pattern
+                    Input.Value searchState.SearchPattern.Pattern
                     Input.Placeholder "Find"
                     Input.OnChange (fun x ->
-                        { searchState with
-                            FilterPattern =
-                            { searchState.FilterPattern with
-                                SearchPattern =
-                                    { searchState.FilterPattern.SearchPattern with
-                                        Pattern = x.Value }
-                            }
-                        }
-                        |> ChangeSearchPattern
+                        SetSearchPattern x.Value
                         |> dispatch)
                     if not disabled then
                         Input.Props [
@@ -923,14 +959,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                         ] [
                             Heading.p [ Heading.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ] [ str "SAFE" ]
 
-                            let getSuggestions pattern =
-                                GetSuggestions pattern
-                                |> dispatch
-                            let tagsSuggestions =
-                                match state.TagsSuggestions with
-                                | Resolved xs -> xs
-                                | _ -> [||]
-                            searchBox searchState tagsSuggestions getSuggestions (SearchMsg >> dispatch)
+                            searchBox searchState (SearchMsg >> dispatch)
                         ]
                     ]
                 | NotePage(idForJump, notePageState) ->
@@ -990,7 +1019,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                                                             {
                                                                 FullNoteTemp = note.FullNote
                                                                 SetFullNoteResult = Saved
-                                                                InputTagsState = InputTags.State.Empty
+                                                                InputTagsState = InputTags.init note.FullNote.Note.Tags
                                                                 RemoveResult = NotRemoved
                                                             }
                                                             |> EditMode
@@ -1074,77 +1103,10 @@ let view (state : State) (dispatch : Msg -> unit) =
                                     | _ ->
                                         Browser.Dom.window.onbeforeunload <- ignore
 
-                                    let tagsSuggestions =
-                                        match state.TagsSuggestions with
-                                        | Resolved xs -> xs
-                                        | _ -> [||]
-                                    editModeState.FullNoteTemp.Note.Tags
-                                    |> InputTags.inputTags
-                                        "inputTagsId"
+                                    InputTags.view
                                         editModeState.InputTagsState
-                                        (fun tag ->
-                                            { editModeState with
-                                                FullNoteTemp =
-                                                    { editModeState.FullNoteTemp with
-                                                        Note =
-                                                            { editModeState.FullNoteTemp.Note with
-                                                                Tags =
-                                                                    editModeState.FullNoteTemp.Note.Tags
-                                                                    |> List.filter ((<>) tag) }}
-                                                SetFullNoteResult = NotSaved
-                                            }
-                                            |> EditMode
-                                            |> ChangeNotePageMode
-                                            |> NoteMsg
-                                            |> dispatch
-                                        )
-                                        (fun st ->
-                                            { editModeState with
-                                                InputTagsState = st
-                                            }
-                                            |> EditMode
-                                            |> ChangeNotePageMode
-                                            |> NoteMsg
-                                            |> dispatch
+                                        (ChangeNotePageTags >> NoteMsg >> dispatch)
 
-                                            GetSuggestions st.CurrentTag
-                                            |> dispatch
-                                        )
-                                        (fun (st, tag) ->
-                                            let tag =
-                                                tag
-                                                |> String.collect
-                                                    (function
-                                                     | ' ' -> "_"
-                                                     | '#' -> ""
-                                                     | x -> string x)
-                                            { editModeState with
-                                                InputTagsState = st
-                                                FullNoteTemp =
-                                                    { editModeState.FullNoteTemp with
-                                                        Note =
-                                                            { editModeState.FullNoteTemp.Note with
-                                                                Tags =
-                                                                    List.foldBack
-                                                                        (fun x st ->
-                                                                            if x = tag then st
-                                                                            else x::st
-                                                                        )
-                                                                        editModeState.FullNoteTemp.Note.Tags
-                                                                        [tag]
-                                                            }
-                                                    }
-                                                SetFullNoteResult = NotSaved
-                                            }
-                                            |> EditMode
-                                            |> ChangeNotePageMode
-                                            |> NoteMsg
-                                            |> dispatch
-
-                                            GetSuggestions ""
-                                            |> dispatch
-                                        )
-                                        tagsSuggestions
                                     Textarea.textarea
                                         [ Textarea.DefaultValue editModeState.FullNoteTemp.Note.Text
                                           Textarea.Size IsLarge
