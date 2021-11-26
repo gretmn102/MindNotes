@@ -8,8 +8,6 @@ open Utils
 open Feliz.Router
 
 [<Literal>]
-let NoteRoute = "note"
-[<Literal>]
 let CreateNoteRoute = "createNote"
 [<Literal>]
 let GetTagsRoute = "getTags"
@@ -44,34 +42,15 @@ type NotePageState =
         Mode : NotePageMode
     }
 
-type SearchState =
-    {
-        SearchResult: Result<FullNote list,string> Deferred
-        SearchPattern: SearchPattern
-        InputTagsState: InputTags.State
-    }
-    static member Init tags =
-        {
-            SearchResult = HasNotStartedYet
-            SearchPattern = SearchPattern.Empty
-            InputTagsState = InputTags.init tags
-        }
-
 type Page =
     | NotePage of IdForJump option * Result<NotePageState,string> Deferred
-    | SearchPage of SearchState
+    | SearchPage of SearchPage.SearchState
     | TagsPage of Deferred<TagsPage.State []>
 
 type State =
     {
         CurrentPage: Page
     }
-
-type SearchMsg =
-    | SetSearchPattern of string
-    | Search
-    | SearchResult of Result<FullNote list,string>
-    | InputSearchMsg of InputTags.Msg
 
 type NoteId = string
 type NoteMsg =
@@ -86,7 +65,7 @@ type NoteMsg =
     | ChangeNotePageTags of InputTags.Msg
 
 type Msg =
-    | SearchMsg of SearchMsg
+    | SearchMsg of SearchPage.SearchMsg
     | NoteMsg of NoteMsg
     | ChangeUrl of string list
 
@@ -95,31 +74,13 @@ type Msg =
 
     | TagRenameMsg of int * TagsPage.Msg
 
-let search (searchState: SearchState) =
-    let filterPattern =
-        {
-            SearchPattern = searchState.SearchPattern
-            Tags = searchState.InputTagsState.InputTagsState.Tags
-        }
-    let cmd =
-        Cmd.OfAsync.perform todosApi.notesFilterByPattern
-            filterPattern
-            (SearchResult >> SearchMsg)
-
-    let searchState =
-        { searchState with
-            SearchResult = InProgress
-        }
-
-    searchState, cmd
-
 let parseUrl state segments =
     match segments with
     | [] ->
         let searchState =
             match state.CurrentPage with
             | SearchPage searchState -> searchState
-            | _ -> SearchState.Init []
+            | _ -> SearchPage.init []
 
         { state with CurrentPage = SearchPage searchState}, Cmd.none
     | NoteRoute::noteId::query ->
@@ -149,14 +110,14 @@ let parseUrl state segments =
             { state with CurrentPage = NotePage (idForJump, InProgress) }, cmd
 
     | TagRoute::tag::_ ->
-        let searchState = SearchState.Init [tag]
-        let searchState, cmd = search searchState
+        let searchState = SearchPage.SearchState.Init [tag]
+        let searchState, cmd = SearchPage.search searchState
         let state =
             { state with
                 CurrentPage =
                     SearchPage searchState
             }
-        state, cmd
+        state, cmd |> Cmd.map SearchMsg
 
     | CreateNoteRoute::_ ->
         let cmd =
@@ -187,62 +148,24 @@ let init (): State * Cmd<Msg> =
     let state =
         {
             CurrentPage =
-                SearchPage (SearchState.Init [])
+                SearchPage (SearchPage.init [])
         }
     Router.currentUrl()
     |> parseUrl state
 
 let update (msg: Msg) (state: State): State * Cmd<Msg> =
     match msg with
-    | SearchMsg x ->
+    | SearchMsg msg ->
         match state.CurrentPage with
         | SearchPage searchPageState ->
-            match x with
-            | InputSearchMsg msg ->
-                let state', cmd =
-                    InputTags.update
-                        todosApi.getSuggestions
-                        msg
-                        searchPageState.InputTagsState
+            let state', cmd = SearchPage.update searchPageState msg
+            let state =
+                { state with
+                    CurrentPage =
+                        SearchPage state'
+                }
+            state, cmd |> Cmd.map SearchMsg
 
-                let state =
-                    { state with
-                        CurrentPage =
-                            SearchPage
-                                { searchPageState with
-                                    InputTagsState = state'
-                                }
-                    }
-                state, Cmd.map (InputSearchMsg >> SearchMsg) cmd
-            | SetSearchPattern value ->
-                let state =
-                    { state with
-                        CurrentPage =
-                            SearchPage
-                                { searchPageState with
-                                    SearchPattern =
-                                        { searchPageState.SearchPattern with
-                                            Pattern = value
-                                        }
-                                }
-                    }
-                state, Cmd.none
-            | Search ->
-                let searchState, cmd = search searchPageState
-
-                let state =
-                    { state with
-                        CurrentPage = SearchPage searchState
-                    }
-                state, cmd
-            | SearchResult searchResult ->
-                let state =
-                    { state with
-                        CurrentPage =
-                            SearchPage
-                                { searchPageState with
-                                    SearchResult = Resolved searchResult }}
-                state, Cmd.none
         | x -> failwithf "expected SearchPage, but %A" x
 
     | ChangeUrl segments ->
@@ -617,124 +540,6 @@ let navBrand (state:State) =
             Fa.i [ Fa.Solid.Tags ] []
         ]
     ]
-let activatedTagsRender tags =
-    tags
-    |> List.map (fun x ->
-        Tag.tag [
-        ] [
-            a [Href (Router.format [TagRoute; x])] [str x]
-        ])
-    |> Tag.list []
-
-let searchBox (searchState : SearchState) (dispatch : SearchMsg -> unit) =
-    Box.box' [ ] [
-        InputTags.view searchState.InputTagsState (InputSearchMsg >> dispatch)
-
-        Field.div [ Field.HasAddons ] [
-            let disabled =
-                System.String.IsNullOrWhiteSpace searchState.SearchPattern.Pattern
-                && List.isEmpty searchState.InputTagsState.InputTagsState.Tags
-
-            Control.p [ Control.IsExpanded ] [
-                Input.text [
-                    Input.Value searchState.SearchPattern.Pattern
-                    Input.Placeholder "Find"
-                    Input.OnChange (fun x ->
-                        SetSearchPattern x.Value
-                        |> dispatch)
-                    if not disabled then
-                        Input.Props [
-                            OnKeyDown (fun e ->
-                                if e.key = "Enter" then
-                                    dispatch Search
-                            )
-                        ]
-                ]
-            ]
-            Control.p [ ] [
-                Button.a [
-                    Button.Disabled disabled
-                    if not disabled then
-                        Button.OnClick (fun _ -> dispatch Search)
-                ] [
-                    Fa.i [ Fa.Solid.Search ] []
-                ]
-            ]
-        ]
-        div [ ] [
-            match searchState.SearchResult with
-            | InProgress ->
-                div [ Class ("block " + Fa.Classes.Size.Fa3x) ]
-                    [ Fa.i [ Fa.Solid.Spinner
-                             Fa.Spin ]
-                        []
-                    ]
-            | HasNotStartedYet -> ()
-            | Resolved x ->
-                match x with
-                | Error x ->
-                    str (sprintf "error: %A" x)
-                | Ok xs ->
-                    if List.isEmpty xs then
-                        Text.p [] [str "not found"]
-                    else
-                        let f (x:FullNote) =
-                            let note = x.Note
-                            [
-                                Level.level [
-                                    Level.Level.Props [
-                                        Style [
-                                            MarginBottom 0
-                                        ]
-                                    ]
-                                ] [
-                                    Level.left [] [
-                                        Level.item [] [
-                                            Field.div [Field.HasAddons] [
-                                                Control.div [] [
-                                                    Button.a [
-                                                        Button.Props [ Href (Router.format [NoteRoute; x.Id]) ]
-                                                    ] [
-                                                        str x.Path
-                                                    ]
-                                                ]
-                                                Control.div [] [
-                                                    match Browser.Navigator.navigator.clipboard with
-                                                    | Some clipboard ->
-                                                        Button.span [
-                                                            Button.OnClick (fun _ ->
-                                                                clipboard.writeText x.Path
-                                                                |> ignore
-                                                            )
-                                                        ] [
-                                                        Fa.span [ Fa.Solid.Clipboard
-                                                                  Fa.FixedWidth
-                                                                ]
-                                                            [ ]
-                                                        ]
-                                                    | None -> ()
-                                                ]
-                                            ]
-                                        ]
-
-                                        Level.item [] [
-                                            div [] [
-                                                span [] [ Fa.i [ Fa.Regular.Eye ] [] ]
-                                                span [] [ str (sprintf " %d" note.Views) ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                                activatedTagsRender note.Tags
-
-                                str (MindNotes.Api.getShortDscr note)
-                            ]
-                        for x in xs do
-                            Card.card [] [
-                                Card.content [] (f x)
-                            ]
-        ]
-    ]
 
 let view (state : State) (dispatch : Msg -> unit) =
     Hero.hero [
@@ -781,7 +586,7 @@ let view (state : State) (dispatch : Msg -> unit) =
                         ] [
                             Heading.p [ Heading.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ] [ str "SAFE" ]
 
-                            searchBox searchState (SearchMsg >> dispatch)
+                            SearchPage.searchBox searchState (SearchMsg >> dispatch)
                         ]
                     ]
                 | NotePage(idForJump, notePageState) ->
