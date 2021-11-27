@@ -12,6 +12,7 @@
         <None Include="paket.references" />
         <Compile Include="Utils.fs" />
         <Compile Include="SearchPage.fs" />
+        <Compile Include="NotePage.fs" />
         <Compile Include="TagsPage.fs" />
         <Compile Include="Index.fs" />
         <Compile Include="App.fs" />
