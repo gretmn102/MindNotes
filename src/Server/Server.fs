@@ -351,6 +351,11 @@ let getSuggestions pattern =
             Some tag
         else None
     )
+    |> Seq.map (fun tag ->
+        tag, StringComparison.ComparisonMetrics.JaroDistance(pattern, tag)
+    )
+    |> Seq.sortByDescending snd
+    |> Seq.map fst
     |> Seq.truncate 10
     |> Array.ofSeq
 

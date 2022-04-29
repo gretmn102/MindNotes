@@ -177,6 +177,7 @@ NUGET
       Giraffe (>= 4.1)
       Microsoft.AspNetCore.Authentication.JwtBearer (>= 3.0.3)
       System.Threading.Tasks.Dataflow (>= 4.11.1)
+    StringComparison (1.0.3)
     System.IdentityModel.Tokens.Jwt (6.7.1)
       Microsoft.IdentityModel.JsonWebTokens (>= 6.7.1)
       Microsoft.IdentityModel.Tokens (>= 6.7.1)
