@@ -32,6 +32,20 @@
             "problemMatcher": []
         },
         {
+            "label": "Build",
+            "type": "shell",
+            "group": "build",
+            "options": { "env": { "PAKET_SKIP_RESTORE_TARGETS": "true" } },
+            "command": "dotnet",
+            "args": [
+                "fake",
+                "build",
+                "-t",
+                "Build"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "FullRun",
             "type": "shell",
             "command": "dotnet",

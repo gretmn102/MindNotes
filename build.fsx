@@ -102,6 +102,11 @@ let runTests () =
 Target.create "RunTests" (fun _ -> runTests ())
 Target.create "JustRunTests" (fun _ -> runTests ())
 
+Target.create "Build" (fun _ ->
+    dotnet "build" clientPath
+    dotnet "build" serverPath
+)
+
 open Fake.Core.TargetOperators
 
 "Clean"
