@@ -41,6 +41,17 @@ module Note =
                 |> String.concat " " |> sprintf "%s\n"
         sprintf "%s|%d\n%s%s" datetime note.Views tags (note.Text.TrimEnd())
 
+    let getShortInlineDescription (note:Note) =
+        let dscr =
+            note.Text.Replace("\n", "\\n")
+                    .Replace("[","\\[")
+                    .Replace("]","\\]")
+        let length = 100
+        if dscr.Length < length then
+            dscr
+        else
+            sprintf "%s..." dscr.[..length - 1]
+
 let notesPrint =
     List.map Note.serialize >> String.concat "\n***\n"
 
@@ -48,14 +59,3 @@ let allTags =
     List.collect (fun x -> x.Tags)
     >> Set.ofList
     >> String.concat "\n"
-
-let getShortDscr (note:Note) =
-    let dscr =
-        note.Text.Replace("\n", "\\n")
-                 .Replace("[","\\[")
-                 .Replace("]","\\]")
-    let length = 100
-    if dscr.Length < length then
-        dscr
-    else
-        sprintf "%s..." dscr.[..length - 1]

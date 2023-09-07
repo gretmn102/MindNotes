@@ -284,7 +284,7 @@ let createTagsMap pred notesDir =
             notes
             |> List.filter pred
             |> List.fold (fun st (notePath, note) ->
-                let shortDscr = getShortDscr note
+                let shortDscr = Note.getShortInlineDescription note
                 let fn st tags =
                     tags
                     |> List.fold (fun st tag ->
@@ -334,7 +334,7 @@ let withoutTags notesDir =
     notesDir
     |> notesFilterBy (fun (notePath, note) ->
         if List.isEmpty note.Tags then
-            Some(notePath, getShortDscr note)
+            Some(notePath, Note.getShortInlineDescription note)
         else None)
 
 let modifyNotes fn notesPath =

@@ -188,7 +188,7 @@ let searchBox (searchState: SearchState) (dispatch: SearchMsg -> unit) =
                                 ]
                                 activatedTagsRender note.Tags
 
-                                str (MindNotes.Api.getShortDscr note)
+                                str (MindNotes.Api.Note.getShortInlineDescription note)
                             ]
                         for x in xs do
                             Card.card [] [
