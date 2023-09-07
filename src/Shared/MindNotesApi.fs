@@ -9,12 +9,19 @@ module Tag =
         |> fun x -> x.Trim()
         |> fun x -> x.Replace(" ", "_")
 
+type NoteDateTime = System.DateTime
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module NoteDateTime =
+    let serialize (dateTime: NoteDateTime) =
+        dateTime.ToString("yyyy-MM-dd_HH-mm-ss")
+
 type Note =
     {
-        DateTime:System.DateTime option
-        Tags:Tag list
-        Text:string
-        Views:int
+        DateTime: NoteDateTime option
+        Tags: Tag list
+        Text: string
+        Views: int
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -52,6 +59,3 @@ let getShortDscr (note:Note) =
         dscr
     else
         sprintf "%s..." dscr.[..length - 1]
-
-let datetimeFileFormat (d:System.DateTime) =
-    d.ToString("yyyy-MM-dd_HH-mm-ss")

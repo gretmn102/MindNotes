@@ -77,7 +77,7 @@ let toMarkdown =
                                         | None -> ""
                                     let res =
                                         match res with
-                                        | Some res -> Shared.MindNotes.Api.datetimeFileFormat res
+                                        | Some res -> Shared.MindNotes.Api.NoteDateTime.serialize res
                                         | None -> currentNoteId
                                     x.Url <-
                                         sprintf "#/note/%s%s"

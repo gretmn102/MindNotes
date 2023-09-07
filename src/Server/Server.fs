@@ -314,7 +314,7 @@ let removeNote id =
 
 let newNote () =
     let dateTime = System.DateTime.Now
-    let id = MindNotes.Api.datetimeFileFormat dateTime
+    let id = MindNotes.Api.NoteDateTime.serialize dateTime
     let path = idToPath id
     try
         use fs = System.IO.File.Create path

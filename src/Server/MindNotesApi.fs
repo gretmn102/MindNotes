@@ -252,7 +252,7 @@ let toNewWorldOrder notesDir notesPath =
         |> List.map (fun note ->
             let path =
                 let dt = note.DateTime.Value
-                datetimeFileFormat dt
+                NoteDateTime.serialize dt
                 |> sprintf "%s.md"
                 |> fun fileName -> System.IO.Path.Combine(notesDir, fileName)
             if System.IO.File.Exists path then
