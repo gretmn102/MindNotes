@@ -5,14 +5,17 @@
 open Fake.Core
 open Fake.DotNet
 open Fake.IO
+open Fake.IO.FileSystemOperators
 open Farmer
 open Farmer.Builders
 
 Target.initEnvironment ()
 
+let clientPath = Path.getFullName "./src/Client"
 let sharedPath = Path.getFullName "./src/Shared"
 let serverPath = Path.getFullName "./src/Server"
 let deployDir = Path.getFullName "./deploy"
+let clientTestsPath = Path.getFullName "./tests/Client"
 let sharedTestsPath = Path.getFullName "./tests/Shared"
 let serverTestsPath = Path.getFullName "./tests/Server"
 
@@ -38,7 +41,21 @@ let dotnet cmd workingDir =
     let result = DotNet.exec (DotNet.Options.withWorkingDirectory workingDir) cmd ""
     if result.ExitCode <> 0 then failwithf "'dotnet %s' failed in %s" cmd workingDir
 
-Target.create "Clean" (fun _ -> Shell.cleanDir deployDir)
+Target.create "Clean" (fun _ ->
+    let removeBinAndObj path =
+        Shell.cleanDirs [
+            path </> "bin"
+            path </> "obj"
+        ]
+
+    removeBinAndObj sharedPath
+    removeBinAndObj sharedTestsPath
+    removeBinAndObj serverPath
+    removeBinAndObj serverTestsPath
+    removeBinAndObj clientPath
+    removeBinAndObj clientTestsPath
+    Shell.cleanDir deployDir
+)
 
 Target.create "InstallClient" (fun _ -> npm "install" ".")
 
