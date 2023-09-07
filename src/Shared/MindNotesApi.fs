@@ -1,5 +1,14 @@
 module Shared.MindNotes.Api
+
 type Tag = string
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module Tag =
+    let escape (tag: Tag) =
+        tag
+        |> fun x -> x.Trim()
+        |> fun x -> x.Replace(" ", "_")
+
 type Note =
     {
         DateTime:System.DateTime option
@@ -32,11 +41,6 @@ let allTags =
     List.collect (fun x -> x.Tags)
     >> Set.ofList
     >> String.concat "\n"
-
-let tagEscape (str:string) =
-    str
-    |> fun x -> x.Trim()
-    |> fun x -> x.Replace(" ", "_")
 
 let getShortDscr (note:Note) =
     let dscr =
