@@ -262,7 +262,7 @@ let toNewWorldOrder notesDir notesPath =
 
     validNotesPaths
     |> List.iter (fun (path, note) ->
-        System.IO.File.WriteAllText(path, notePrint note)
+        System.IO.File.WriteAllText(path, Note.serialize note)
     )
     System.IO.File.Copy(notesPath, backupPath notesPath, true)
     notesPrint restNotes

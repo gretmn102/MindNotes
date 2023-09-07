@@ -239,7 +239,7 @@ let setNote (fullNote:FullNote) =
     let f () =
         try
             use sw = new System.IO.StreamWriter(fullNote.Path, false)
-            let str = MindNotes.Api.notePrint fullNote.Note
+            let str = MindNotes.Api.Note.serialize fullNote.Note
             sw.Write str
             sw.Close()
             let x = MarkdownConverter.toMarkdown fullNote.Id fullNote.Note.Text
@@ -326,7 +326,7 @@ let newNote () =
                 Text = ""
                 Views = 0
             }
-        let str = MindNotes.Api.notePrint note
+        let str = MindNotes.Api.Note.serialize note
         let bytes = System.Text.UTF8Encoding.UTF8.GetBytes str
         fs.Write(bytes, 0, bytes.Length)
 

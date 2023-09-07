@@ -8,21 +8,25 @@ type Note =
         Views:int
     }
 
-let notePrint (note:Note) =
-    let datetime =
-        note.DateTime
-        |> Option.map (fun x -> x.ToString("dd.MM.yyyy HH:mm:ss"))
-        |> Option.defaultValue ""
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module Note =
+    let serialize (note: Note) =
+        let datetime =
+            note.DateTime
+            |> Option.map (fun x -> x.ToString("dd.MM.yyyy HH:mm:ss"))
+            |> Option.defaultValue ""
 
-    let tags =
-        match note.Tags with
-        | [] -> ""
-        | xs ->
-            xs |> List.map (sprintf "#%s")
-            |> String.concat " " |> sprintf "%s\n"
-    sprintf "%s|%d\n%s%s" datetime note.Views tags (note.Text.TrimEnd())
+        let tags =
+            match note.Tags with
+            | [] -> ""
+            | xs ->
+                xs |> List.map (sprintf "#%s")
+                |> String.concat " " |> sprintf "%s\n"
+        sprintf "%s|%d\n%s%s" datetime note.Views tags (note.Text.TrimEnd())
+
 let notesPrint =
-    List.map notePrint >> String.concat "\n***\n"
+    List.map Note.serialize >> String.concat "\n***\n"
 
 let allTags =
     List.collect (fun x -> x.Tags)
