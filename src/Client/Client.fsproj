@@ -5,9 +5,6 @@
         <DefineConstants>FABLE_COMPILER</DefineConstants>
     </PropertyGroup>
     <ItemGroup>
-        <Compile Include="..\..\paket-files\github.com\gretmn102\FulmaExtensions\src\Types.fs" />
-        <Compile Include="..\..\paket-files\github.com\gretmn102\FulmaExtensions\src\InputWithSuggestions.fs" />
-        <Compile Include="..\..\paket-files\github.com\gretmn102\FulmaExtensions\src\InputTags.fs" />
         <None Include="index.html" />
         <None Include="paket.references" />
         <Compile Include="Utils.fs" />
