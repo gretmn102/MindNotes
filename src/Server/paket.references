@@ -5,3 +5,4 @@ group Server
     FParsec
     Markdig
     StringComparison
+    FSharpMyExt
