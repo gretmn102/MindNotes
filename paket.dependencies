@@ -48,4 +48,3 @@ group Build
     nuget Fake.Core.Target < 6
     nuget Fake.DotNet.Cli < 6
     nuget Fake.IO.FileSystem < 6
-    nuget Farmer

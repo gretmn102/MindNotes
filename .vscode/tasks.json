@@ -4,56 +4,133 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "JustRun",
+            "label": "Deploy",
             "type": "shell",
             "command": "dotnet",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
             "args": [
                 "fake",
                 "build",
                 "-t",
-                "JustRun"
+                "Deploy"
             ],
+            "problemMatcher": []
+        },
+        {
+            "label": "DotnetBuild",
+            "type": "shell",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": []
-        },
-        {
-            "label": "JustBundle",
-            "type": "shell",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
             "command": "dotnet",
             "args": [
                 "fake",
                 "build",
                 "-t",
-                "JustBundle"
+                "DotnetBuild"
             ],
             "problemMatcher": []
         },
         {
-            "label": "Build",
+            "label": "ClientTestsWatch",
             "type": "shell",
-            "group": "build",
-            "options": { "env": { "PAKET_SKIP_RESTORE_TARGETS": "true" } },
             "command": "dotnet",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
             "args": [
                 "fake",
                 "build",
                 "-t",
-                "Build"
+                "ClientTestsWatch"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "ServerTestsRun",
+            "type": "shell",
+            "command": "dotnet",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
+            "args": [
+                "fake",
+                "build",
+                "-t",
+                "ServerTestsRun"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "ServerWatch",
+            "type": "shell",
+            "command": "dotnet",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
+            "args": [
+                "fake",
+                "build",
+                "-t",
+                "ServerWatch"
             ],
             "problemMatcher": []
         },
         {
-            "label": "FullRun",
+            "label": "DotnetClean",
             "type": "shell",
             "command": "dotnet",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
             "args": [
                 "fake",
                 "build",
                 "-t",
-                "Run"
+                "DotnetClean"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "DotnetCleanBuild",
+            "type": "shell",
+            "command": "dotnet",
+            "options": {
+                "env": {
+                    "PAKET_SKIP_RESTORE_TARGETS": "true"
+                }
+            },
+            "args": [
+                "fake",
+                "build",
+                "-t",
+                "DotnetCleanBuild"
             ],
             "problemMatcher": []
         }
