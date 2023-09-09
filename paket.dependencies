@@ -1,44 +1,51 @@
+strategy: min
 source https://api.nuget.org/v3/index.json
-framework: netcoreapp3.1
+framework: netcoreapp3.1, netstandard2.0
 storage: none
 
-nuget Fable.Remoting.Giraffe
+nuget FSharp.Core = 6.0.7
+nuget Fable.Remoting.Giraffe = 4.9
 nuget Feliz.Router
-nuget Markdig
-nuget Saturn
-nuget Expecto
+nuget Feliz = 2.6
+nuget Markdig = 0.22.1
+nuget Saturn = 0.14.1
+nuget Expecto = 9.0.2
 
-nuget Fable.Core
-nuget Fable.Elmish
-nuget Fable.Elmish.React
+nuget Fable.Browser.Dom = 2.14
+nuget Fable.Core = 4.0
+nuget Fable.Elmish = 4.0.2
+nuget Fable.Elmish.React = 4.0
 nuget Fable.Elmish.Debugger
 nuget Fable.Elmish.HMR
-nuget Fable.FontAwesome.Free
+nuget Fable.FontAwesome.Free = 3.0
 nuget Fable.Mocha
-nuget Fable.React
-nuget Fable.Remoting.Client
-nuget Fulma
+nuget Fable.React = 9.3
+nuget Fable.Remoting.Client = 7.25.0
+nuget Fulma = 3.0
 nuget Fulma.Extensions.Wikiki.Checkradio
-git https://github.com/gretmn102/FulmaExtensions.git
+
+source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
+nuget FulmaExtensions
 
 nuget Fable.Browser.Navigator
 
 nuget FParsec
 nuget StringComparison
-nuget Zanaptak.TypedCssClasses
-git https://github.com/gretmn102/FsharpMyExtension.git master build: "build.cmd", OS: windows
-git https://github.com/gretmn102/FsharpMyExtension.git master build: "build.sh", OS: mono
+nuget Zanaptak.TypedCssClasses = 1.0
+git https://github.com/gretmn102/FsharpMyExtension.git 9a4e9268ae7314b49f1f8438db0b71de71ef5657 build: "build.cmd", OS: windows
+git https://github.com/gretmn102/FsharpMyExtension.git 9a4e9268ae7314b49f1f8438db0b71de71ef5657 build: "build.sh", OS: mono
 
 
 
 group Build
+    strategy: min
     source https://api.nuget.org/v3/index.json
     framework: netstandard2.0
     storage: none
 
-    nuget FSharp.Core
-    nuget Fake.Core.ReleaseNotes
-    nuget Fake.Core.Target
-    nuget Fake.DotNet.Cli
-    nuget Fake.IO.FileSystem
+    nuget FSharp.Core < 6
+    nuget Fake.Core.ReleaseNotes < 6
+    nuget Fake.Core.Target < 6
+    nuget Fake.DotNet.Cli < 6
+    nuget Fake.IO.FileSystem < 6
     nuget Farmer

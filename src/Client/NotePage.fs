@@ -435,7 +435,7 @@ let view (state: State) (dispatch: NoteMsg -> unit) =
                     match editModeState.SetFullNoteResult with
                     | NotSaved ->
                         Browser.Dom.window.onbeforeunload <- (fun e ->
-                            Browser.Dom.window.confirm ()
+                            Browser.Dom.window.confirm () |> ignore
                         )
                     | _ ->
                         Browser.Dom.window.onbeforeunload <- ignore

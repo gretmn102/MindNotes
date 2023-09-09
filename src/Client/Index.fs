@@ -70,7 +70,7 @@ let parseUrl state segments =
             let idForJump =
                 match xs with
                 | x::_ ->
-                    if x.StartsWith '#' then
+                    if x.StartsWith "#" then
                         Some x
                     else
                         None
