@@ -1,5 +1,7 @@
-Saturn
-Fable.Remoting.Giraffe
-FParsec
-Markdig
-StringComparison
+group Server
+    FSharp.Core
+    Saturn
+    Fable.Remoting.Giraffe
+    FParsec
+    Markdig
+    StringComparison
