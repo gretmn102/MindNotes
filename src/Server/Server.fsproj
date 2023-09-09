@@ -8,7 +8,6 @@
     <None Include="paket.references" />
     <Compile Include="MindNotesApi.fs" />
     <Compile Include="MarkdownConverter.fs" />
-    <Compile Include="Note.fs" />
     <Compile Include="Server.fs" />
   </ItemGroup>
   <ItemGroup>
