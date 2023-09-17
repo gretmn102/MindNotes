@@ -6,7 +6,7 @@ open FsharpMyExtension
 open FsharpMyExtension.Either
 module UrlParse =
     open FParsec
-    open MindNotes.Api
+    open Shared.MindNotes.Api
 
     /// `System.DateTime * fragment:string option`
     let parseInternalUrl str =

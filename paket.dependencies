@@ -38,6 +38,18 @@ group ClientTests
     nuget FSharp.Core = 6.0.7
     nuget Fable.Mocha = 2.17
 
+group Shared
+    strategy: min
+    source https://api.nuget.org/v3/index.json
+    framework: netstandard2.0
+    storage: none
+
+    nuget FParsec
+
+    source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
+    nuget FSharpMyExt 2.0.0-prerelease.4
+    nuget FUniversalParser
+
 group Server
     strategy: min
     source https://api.nuget.org/v3/index.json
@@ -48,11 +60,10 @@ group Server
     nuget Fable.Remoting.Giraffe = 4.9
     nuget Markdig = 0.22.1
     nuget Saturn = 0.14.1
-    nuget FParsec
     nuget StringComparison
 
     source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
-    nuget FSharpMyExt prerelease
+    nuget FSharpMyExt 2.0.0-prerelease.4
 
 group ServerTests
     strategy: min
