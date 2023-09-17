@@ -35,7 +35,7 @@ let parseNotes (noteFiles:seq<System.IO.FileInfo>) =
     |> Seq.map (fun fi ->
         let notePath = fi.FullName
         try
-            MindNotes.Api.Parser.parseNoteOnFile notePath
+            MindNotes.Api.Note.Parser.parseFile notePath
             |> Either.map (fun note ->
                 {
                     Id = pathToId notePath
@@ -269,7 +269,7 @@ let getNote id =
     let fi = System.IO.FileInfo path
     if fi.Exists then
         if fi.Length > 0L then
-            MindNotes.Api.Parser.parseNoteOnFile path
+            MindNotes.Api.Note.Parser.parseFile path
             |> Either.bind (fun note ->
                 let markdownRender = MarkdownConverter.toMarkdown id note.Text
                 {

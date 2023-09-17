@@ -6,14 +6,14 @@ open FsharpMyExtension
 open FsharpMyExtension.Either
 module UrlParse =
     open FParsec
-    open MindNotes.Api.Parser
+    open MindNotes.Api
 
     /// `System.DateTime * fragment:string option`
     let parseInternalUrl str =
         let sharp =
             skipChar '#' >>. manySatisfy (fun _ -> true)
         let p =
-            pdateTimeFileFormat .>> skipString ".md" |>> Some
+            NoteDateTime.Parser.pdateTimeFileFormat .>> skipString ".md" |>> Some
             .>>. (optional (skipChar '/')
                   >>. opt sharp)
             <|> ((skipChar '/' >>. sharp) <|> sharp |>> fun x -> None, Some x)

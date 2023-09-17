@@ -4,124 +4,161 @@ open FsharpMyExtension.Either
 
 open Shared.MindNotes.Api
 
-module Parser =
+module SharedParser =
     open FParsec
 
     type 'a Parser = Parser<'a,unit>
 
     let skipSpaces' : _ Parser = skipManySatisfy (isAnyOf " \t")
 
-    let ptag : _ Parser = pchar '#' >>. many1Satisfy (isNoneOf "\n ")
+module Tag =
+    module Parser =
+        open FParsec
 
-    let tags1 =
-        many1 (ptag .>> skipSpaces')
+        open SharedParser
 
-    let pdate : _ Parser =
-        notFollowedByString "#" >>. many1Satisfy (isNoneOf "\n")
-        >>= fun x ->
-            match System.DateTime.TryParse x with
-            | true, x -> preturn x
-            | _ -> fail "datetime"
+        let ptag : _ Parser = pchar '#' >>. many1Satisfy (isNoneOf "\n ")
 
-    /// `10.03.2019 0:35:28`
-    let pdatetime : _ Parser =
-        pipe4
-            (pint32 .>> pchar '.')
-            (pint32 .>> pchar '.')
-            (pint32 .>> skipSpaces')
-            (opt (tuple3
-                    pint32
-                    (pchar ':' >>. pint32)
-                    (opt (pchar ':' >>. pint32)))
+module TagsList =
+    module Parser =
+        open FParsec
+
+        open SharedParser
+
+        let ptags1 =
+            many1 (Tag.Parser.ptag .>> skipSpaces')
+
+module NoteDateTime =
+    module Parser =
+        open FParsec
+
+        open SharedParser
+
+        let pdate : _ Parser =
+            notFollowedByString "#" >>. many1Satisfy (isNoneOf "\n")
+            >>= fun x ->
+                match System.DateTime.TryParse x with
+                | true, x -> preturn x
+                | _ -> fail "datetime"
+
+        /// `10.03.2019 0:35:28`
+        let pdatetime : _ Parser =
+            pipe4
+                (pint32 .>> pchar '.')
+                (pint32 .>> pchar '.')
+                (pint32 .>> skipSpaces')
+                (opt (tuple3
+                        pint32
+                        (pchar ':' >>. pint32)
+                        (opt (pchar ':' >>. pint32)))
+                    )
+                (fun day month year time ->
+                    match time with
+                    | Some(hour, min, sec) ->
+                        let sec = sec |> Option.defaultValue 0
+                        System.DateTime(year, month, day, hour, min, sec)
+                    | None -> System.DateTime(year, month, day))
+
+        /// Дело в том, что если копировать дату-время файла с вкладки "Свойства" в Window 7, то он вставляет какие-то загадочные Unicode-разделители, выглядит это так: `\u200e6 \u200eдекабря \u200e2018 \u200eг., \u200f\u200e14:17:27`.
+        let pdatetimeStrange : _ Parser =
+            let leftToRightMark = '\u200e'
+            let rightToLeftMark = '\u200f'
+            pchar leftToRightMark
+            >>. many1Strings (
+                many1Satisfy (isNoneOf [leftToRightMark; rightToLeftMark; '\n'])
+                <|> charReturn leftToRightMark ""
+                <|> charReturn rightToLeftMark ""
+            )
+            >>= fun x ->
+                try
+                    let dateTime =
+                        let ruFormatProvider = System.Globalization.CultureInfo("ru-RU", false)
+                        System.DateTime.Parse(x, ruFormatProvider)
+
+                    preturn dateTime
+                with e ->
+                    fail e.Message
+
+        /// `yyyy-MM-dd_HH-mm-ss`
+        let pdateTimeFileFormat: _ Parser =
+            pipe5
+                pint32
+                (pchar '-' >>. pint32)
+                (pchar '-' >>. pint32)
+                (pchar '_' >>. pint32)
+                (pchar '-' >>. pint32 .>>. (pchar '-' >>. pint32))
+                (fun year month day hour (minute, sec) ->
+                    System.DateTime(year, month, day, hour, minute, sec)
                 )
-            (fun day month year time ->
-                match time with
-                | Some(hour, min, sec) ->
-                    let sec = sec |> Option.defaultValue 0
-                    System.DateTime(year, month, day, hour, min, sec)
-                | None -> System.DateTime(year, month, day))
 
-    let ptext : _ Parser =
-        many1Strings
-            (
-                notFollowedBy (pstring "***" .>> (skipNewline <|> eof))
-                >>. (many1Satisfy ((<>) '\n') <|> newlineReturn "\n")
-            )
+module Note =
+    module Parser =
+        open FParsec
 
-    /// Дело в том, что если копировать дату-время файла с вкладки "Свойства" в Window 7, то он вставляет какие-то загадочные Unicode-разделители, выглядит это так: `\u200e6 \u200eдекабря \u200e2018 \u200eг., \u200f\u200e14:17:27`.
-    let pdatetimeStrange : _ Parser =
-        let leftToRightMark = '\u200e'
-        let rightToLeftMark = '\u200f'
-        pchar leftToRightMark
-        >>. many1Strings (
-            many1Satisfy (isNoneOf [leftToRightMark; rightToLeftMark; '\n'])
-            <|> charReturn leftToRightMark ""
-            <|> charReturn rightToLeftMark ""
-        )
-        >>= fun x ->
-            try
-                let dateTime =
-                    let ruFormatProvider = System.Globalization.CultureInfo("ru-RU", false)
-                    System.DateTime.Parse(x, ruFormatProvider)
+        open SharedParser
 
-                preturn dateTime
-            with e ->
-                fail e.Message
+        let prawContent =
+            manySatisfy (fun _ -> true)
 
-    let pnote ptext : _ Parser =
-        let tags =
-            let p = pstring "//" >>. skipSpaces'
-            (p >>? tags1) <|> (notFollowedBy (pchar '#' >>. satisfy (isAnyOf " \n")) >>. tags1)
-            .>> skipNewline
-        pipe4
-            (opt (pdatetimeStrange <|> pdatetime))
-            (opt (pchar '|' >>. pint32) .>> optional skipNewline)
-            (opt tags)
-            ptext
-            (fun datetime views tags text ->
-                { DateTime = datetime
-                  Views = views |> Option.defaultValue 0
-                  Tags = tags |> Option.defaultValue []
-                  Text = text })
+        let parser pcontent : _ Parser =
+            let tags =
+                let p = pstring "//" >>. skipSpaces'
+                (p >>? TagsList.Parser.ptags1)
+                <|> (notFollowedBy (pchar '#' >>. satisfy (isAnyOf " \n")) >>. TagsList.Parser.ptags1)
+                .>> skipNewline
+            pipe4
+                (opt (NoteDateTime.Parser.pdatetimeStrange <|> NoteDateTime.Parser.pdatetime))
+                (opt (pchar '|' >>. pint32) .>> optional skipNewline)
+                (opt tags)
+                pcontent
+                (fun datetime views tags text ->
+                    {
+                        DateTime = datetime
+                        Views = views |> Option.defaultValue 0
+                        Tags = tags |> Option.defaultValue []
+                        Text = text
+                    }
+                )
 
-    let start : _ Parser =
-        let sep = pstring "***" .>> skipNewline
-        optional sep
-        >>. sepEndBy1 (pnote ptext) sep
-        .>> eof
+        let parseFile notePath =
+            let p =
+                spaces >>. parser prawContent
+            match runParserOnFile p () notePath System.Text.Encoding.UTF8 with
+            | Success(note, _, _) -> Right note
+            | Failure(errMsg, _, _) -> Left errMsg
 
-    let startOnFile path =
-        match runParserOnFile start () path System.Text.Encoding.UTF8 with
-        | Success(notes, _, _) -> notes
-        | Failure(errMsg, _, _) -> failwithf "%s" errMsg
+module NotesList =
+    module Parser =
+        open FParsec
 
-    let parseNoteOnFile notePath =
-        let p =
-            spaces >>. pnote (manySatisfy (fun _ -> true))
-        match runParserOnFile p () notePath System.Text.Encoding.UTF8 with
-        | Success(note, _, _) -> Right note
-        | Failure(errMsg, _, _) -> Left errMsg
+        open SharedParser
 
-    /// `yyyy-MM-dd_HH-mm-ss`
-    let pdateTimeFileFormat: _ Parser =
-        pipe5
-            pint32
-            (pchar '-' >>. pint32)
-            (pchar '-' >>. pint32)
-            (pchar '_' >>. pint32)
-            (pchar '-' >>. pint32 .>>. (pchar '-' >>. pint32))
-            (fun year month day hour (minute, sec) ->
-                System.DateTime(year, month, day, hour, minute, sec)
-            )
+        let pnoteSeparator : _ Parser = pstring "***"
 
-open Parser
+        let pcontentWithSeparator : _ Parser =
+            many1Strings
+                (
+                    notFollowedBy (pnoteSeparator .>> (skipNewline <|> eof))
+                    >>. (many1Satisfy ((<>) '\n') <|> newlineReturn "\n")
+                )
+
+        let parser : _ Parser =
+            let sep = pnoteSeparator .>> skipNewline
+            optional sep
+            >>. sepEndBy1 (Note.Parser.parser pcontentWithSeparator) sep
+            .>> eof
+
+        let parseFile path =
+            match runParserOnFile parser () path System.Text.Encoding.UTF8 with
+            | Success(notes, _, _) -> notes
+            | Failure(errMsg, _, _) -> failwithf "%s" errMsg
 
 let backupPath randomNotesPath =
     System.IO.Path.ChangeExtension(randomNotesPath, ".bak")
 // let proxyPath = "output\\outputFalse.txt"
 
 let split randomNotesPath tagsToPaths =
-    let randomNotes : Note list = startOnFile randomNotesPath
+    let randomNotes : Note list = NotesList.Parser.parseFile randomNotesPath
 
     let splitNotOptimize tagsToPaths randomNotes =
         tagsToPaths
@@ -187,7 +224,7 @@ let split randomNotesPath tagsToPaths =
 
 let sort path =
     if System.IO.File.Exists path then
-        let notes = startOnFile path
+        let notes = NotesList.Parser.parseFile path
         let noteWithNotDate =
             notes |> List.tryFind (fun x -> Option.isNone x.DateTime)
         match noteWithNotDate with
@@ -222,10 +259,8 @@ let addTagsUniq xs note =
                 (Set.ofList note.Tags)
             |> Set.toList }
 
-open FParsec
-
 let toNewWorldOrder notesDir notesPath =
-    let notes = startOnFile notesPath
+    let notes = NotesList.Parser.parseFile notesPath
 
     let validNotes, restNotes =
         notes |> List.partition (fun note -> Option.isSome note.DateTime)
@@ -259,7 +294,7 @@ let createTagsMap pred notesDir =
     let tagNotes =
         notesPaths
         |> Seq.map (fun notePath ->
-            parseNoteOnFile notePath
+            Note.Parser.parseFile notePath
             |> Either.map (fun note -> notePath, note)
         )
         |> Seq.seqEither
@@ -299,7 +334,7 @@ let withoutTags notesDir =
         let tagNotes =
             notesPaths
             |> Seq.map (fun notePath ->
-                parseNoteOnFile notePath
+                Note.Parser.parseFile notePath
                 |> Either.map (fun note -> notePath, note)
             )
             |> Seq.seqEither
@@ -321,7 +356,7 @@ let withoutTags notesDir =
         else None)
 
 let modifyNotes fn notesPath =
-    let notes = startOnFile notesPath
+    let notes = NotesList.Parser.parseFile notesPath
     let notes =
         notes |> List.map fn
 
