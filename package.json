@@ -2,7 +2,8 @@
     "private": true,
     "scripts": {
         "vite:watch": "vite",
-        "vite:build": "vite build"
+        "vite:build": "vite build",
+        "test:vite:watch": "npm run vite:watch -- --config vite.tests.config.js"
     },
     "devDependencies": {
         "mocha": "^8.3.2",
