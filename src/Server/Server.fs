@@ -13,23 +13,6 @@ open FsharpMyExtension.Either
 let idToPath (id:Shared.NoteId) = System.IO.Path.Combine(notesDir, id + ".md")
 let pathToId (path:string): Shared.NoteId = System.IO.Path.GetFileNameWithoutExtension path
 
-type State =
-    | GetTags of AsyncReplyChannel<Map<MindNotes.Api.Tag, Shared.NoteId Set>>
-    | SetTags of Map<MindNotes.Api.Tag, Shared.NoteId Set>
-
-    | UpdateTagsFor of Shared.NoteId * MindNotes.Api.Tag Set
-
-type TagsState =
-    {
-        Tags: Map<MindNotes.Api.Tag, Shared.NoteId Set>
-        NoteIds: Map<Shared.NoteId, MindNotes.Api.Tag Set>
-    }
-    static member Empty =
-        {
-            Tags = Map.empty
-            NoteIds = Map.empty
-        }
-
 let parseNotes (noteFiles:seq<System.IO.FileInfo>) =
     noteFiles
     |> Seq.map (fun fi ->
@@ -49,87 +32,123 @@ let parseNotes (noteFiles:seq<System.IO.FileInfo>) =
             Left e.Message
     )
 
-let mail =
-    MailboxProcessor.Start (fun r ->
-        let rec loop (state:TagsState) =
-            async {
-                let! m = r.Receive()
-                match m with
-                | GetTags r ->
-                    let tags =
-                        if Map.isEmpty state.Tags then
-                            let tags =
-                                let d = System.IO.DirectoryInfo(notesDir)
-                                if d.Exists then
-                                    let noteFiles = d.EnumerateFiles "*"
+type TagsState =
+    {
+        Tags: Map<MindNotes.Api.Tag, Shared.NoteId Set>
+        NoteIds: Map<Shared.NoteId, MindNotes.Api.Tag Set>
+    }
+    static member Empty =
+        {
+            Tags = Map.empty
+            NoteIds = Map.empty
+        }
 
-                                    parseNotes noteFiles
-                                    |> Seq.fold
-                                        (fun st note ->
-                                            match note with
-                                            | Right note ->
-                                                let st =
-                                                    note.Note.Tags
-                                                    |> List.fold
-                                                        (fun st tag ->
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module TagsState =
+    type Cmd =
+        | GetTags of AsyncReplyChannel<Map<MindNotes.Api.Tag, Shared.NoteId Set>>
+        | SetTags of Map<MindNotes.Api.Tag, Shared.NoteId Set>
+
+        | UpdateTagsFor of Shared.NoteId * MindNotes.Api.Tag Set
+
+    let mail =
+        MailboxProcessor.Start (fun r ->
+            let rec loop (state: TagsState) =
+                async {
+                    let! m = r.Receive()
+                    match m with
+                    | GetTags r ->
+                        let tags =
+                            if Map.isEmpty state.Tags then
+                                let tags =
+                                    let d = System.IO.DirectoryInfo(notesDir)
+                                    if d.Exists then
+                                        let noteFiles = d.EnumerateFiles "*"
+
+                                        parseNotes noteFiles
+                                        |> Seq.fold
+                                            (fun st note ->
+                                                match note with
+                                                | Right note ->
+                                                    let st =
+                                                        note.Note.Tags
+                                                        |> List.fold
+                                                            (fun st tag ->
+                                                                st
+                                                                |> Map.addOrModWith
+                                                                    tag
+                                                                    (fun () -> Set.singleton note.Id)
+                                                                    (Set.add note.Id)
+                                                            )
                                                             st
-                                                            |> Map.addOrModWith
-                                                                tag
-                                                                (fun () -> Set.singleton note.Id)
-                                                                (Set.add note.Id)
-                                                        )
-                                                        st
-                                                st
-                                            | Left errMsg -> st
+                                                    st
+                                                | Left errMsg -> st
+                                            )
+                                            Map.empty
+                                    else
+                                        Map.empty
+                                tags
+                            else
+                                state.Tags
+                        r.Reply tags
+                        return! loop { state with Tags = tags }
+
+                    | SetTags xs ->
+                        let state =
+                            {
+                                Tags = xs
+                                NoteIds =
+                                    xs
+                                    |> Map.fold
+                                        (fun st tag noteIds ->
+                                            noteIds
+                                            |> Set.fold (fun st noteId ->
+                                                Map.addOrModWith
+                                                    noteId
+                                                    (fun () -> Set.singleton tag)
+                                                    (fun st -> Set.add tag st)
+                                                    st
+                                            ) st
                                         )
                                         Map.empty
-                                else
-                                    Map.empty
-                            tags
-                        else
-                            state.Tags
-                    r.Reply tags
-                    return! loop { state with Tags = tags }
-                | SetTags xs ->
-                    let state =
-                        {
-                            Tags = xs
-                            NoteIds =
-                                xs
-                                |> Map.fold (fun st tag noteIds ->
-                                    noteIds
-                                    |> Set.fold (fun st noteId ->
-                                        Map.addOrModWith
-                                            noteId
-                                            (fun () -> Set.singleton tag)
-                                            (fun st -> Set.add tag st)
-                                            st
-                                    ) st
-                                ) Map.empty
-                        }
-                    return! loop state
-                | UpdateTagsFor(noteId, newTags) ->
-                    let notesIds =
-                        match Map.tryFind noteId state.NoteIds with
-                        | Some oldTags ->
-                            // let oldTags = Set [ "перестройка"; "коммунизм"; "люди" ]
-                            // let newTags = Set [ "90-е"; "люди" ]
-                            let removes = Set.difference oldTags newTags
-                            let adds = Set.difference newTags oldTags
+                            }
+                        return! loop state
 
-                            let st =
-                                removes
-                                |> Set.fold
-                                    (fun st tag ->
-                                        match Map.tryFind tag st with
-                                        | Some noteIds ->
-                                            let v = Set.remove noteId noteIds
-                                            Map.add tag v st
-                                        | None -> st
-                                    )
-                                    state.Tags
-                            let st =
-                                adds
+                    | UpdateTagsFor(noteId, newTags) ->
+                        let notesIds =
+                            match Map.tryFind noteId state.NoteIds with
+                            | Some oldTags ->
+                                let removes = Set.difference oldTags newTags
+                                let adds = Set.difference newTags oldTags
+
+                                let st =
+                                    removes
+                                    |> Set.fold
+                                        (fun st tag ->
+                                            match Map.tryFind tag st with
+                                            | Some noteIds ->
+                                                let v = Set.remove noteId noteIds
+                                                Map.add tag v st
+                                            | None -> st
+                                        )
+                                        state.Tags
+
+                                let st =
+                                    adds
+                                    |> Set.fold
+                                        (fun st tag ->
+                                            st
+                                            |> Map.addOrModWith
+                                                tag
+                                                (fun () -> Set.singleton noteId)
+                                                (Set.add noteId)
+                                        )
+                                        st
+
+                                st
+                            | None ->
+                                newTags
                                 |> Set.fold
                                     (fun st tag ->
                                         st
@@ -138,33 +157,24 @@ let mail =
                                             (fun () -> Set.singleton noteId)
                                             (Set.add noteId)
                                     )
-                                    st
-                            st
-                        | None ->
-                            newTags
-                            |> Set.fold
-                                (fun st tag ->
-                                    st
-                                    |> Map.addOrModWith
-                                        tag
-                                        (fun () -> Set.singleton noteId)
-                                        (Set.add noteId)
-                                )
-                                state.Tags
+                                    state.Tags
 
-                    let state =
-                        {
-                            Tags = notesIds
-                            NoteIds = Map.add noteId newTags state.NoteIds
-                        }
-                    return! loop state
-            }
+                        let state =
+                            {
+                                Tags = notesIds
+                                NoteIds = Map.add noteId newTags state.NoteIds
+                            }
+                        return! loop state
+                }
 
-        loop TagsState.Empty
-    )
-let setTags xs = mail.Post (SetTags xs)
-let getTags () = mail.PostAndReply (fun r -> GetTags r)
-let updateTags(noteId, tags) = mail.Post (UpdateTagsFor(noteId, tags))
+            loop TagsState.Empty
+        )
+
+    let setTags xs = mail.Post (SetTags xs)
+
+    let getTags () = mail.PostAndReply (fun r -> GetTags r)
+
+    let updateTags(noteId, tags) = mail.Post (UpdateTagsFor(noteId, tags))
 
 let notesFilter pred =
     try
@@ -244,7 +254,7 @@ let setNote (fullNote:FullNote) =
             sw.Close()
             let x = MarkdownConverter.toMarkdown fullNote.Id fullNote.Note.Text
 
-            updateTags(fullNote.Id, Set.ofList fullNote.Note.Tags)
+            TagsState.updateTags(fullNote.Id, Set.ofList fullNote.Note.Tags)
 
             let res =
                 { fullNote with
@@ -285,7 +295,7 @@ let getNote id =
                 |> setNote
             )
         else
-            updateTags(id, Set.empty)
+            TagsState.updateTags(id, Set.empty)
 
             {
                 Id = id
@@ -343,7 +353,7 @@ let newNote () =
 
 let getSuggestions pattern =
     let r = System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-    let tags = getTags ()
+    let tags = TagsState.getTags ()
 
     tags
     |> Seq.choose (fun (KeyValue(tag, _)) ->
@@ -364,7 +374,7 @@ let api =
         notesFilterByPattern = fun pattern ->
             async {
                 if System.String.IsNullOrEmpty pattern.SearchPattern.Pattern then
-                    let tags = getTags ()
+                    let tags = TagsState.getTags ()
 
                     let f tags xs =
                         let rec f acc = function
@@ -402,7 +412,7 @@ let api =
                 else
                     match notesFilterByPattern pattern with
                     | Ok(notes, tags) ->
-                        setTags tags
+                        TagsState.setTags tags
                         return Ok notes
                     | Error err ->
                         return Error err
@@ -430,7 +440,7 @@ let api =
         getTags = fun () ->
             async {
                 let tags =
-                    getTags ()
+                    TagsState.getTags ()
                     |> Seq.map (fun (KeyValue(k, v)) -> k)
                     |> Array.ofSeq
                 return tags
@@ -438,7 +448,7 @@ let api =
         renameTag = fun (targetTag, destinationTag) ->
             async {
                 let res =
-                    match Map.tryFind targetTag (getTags ()) with
+                    match Map.tryFind targetTag (TagsState.getTags ()) with
                     | Some noteIds ->
                         noteIds
                         |> Seq.map (fun noteId ->
