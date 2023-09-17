@@ -43,39 +43,9 @@ let parserTests =
                 (Ok "foo")
                 ""
 
-        testCase "ptext \"* foo\" is success" <| fun _ ->
-            Expect.equal
-                (FParsecExt.runResult NotesList.Parser.pcontentWithSeparator "* foo")
-                (Ok "* foo")
-                ""
-
-        testCase "ptext \"**foo\" is success" <| fun _ ->
-            Expect.equal
-                (FParsecExt.runResult NotesList.Parser.pcontentWithSeparator "**foo")
-                (Ok "**foo")
-                ""
-
-        testCase "ptext \"***foo\" is success" <| fun _ ->
-            Expect.equal
-                (FParsecExt.runResult NotesList.Parser.pcontentWithSeparator "***foo")
-                (Ok "***foo")
-                ""
-
-        testCase "ptext \"**\\nfoo\\n***\\nbar\" is success" <| fun _ ->
-            Expect.equal
-                (FParsecExt.runResult NotesList.Parser.pcontentWithSeparator "**\nfoo\n***\nbar")
-                (Ok "**\nfoo\n")
-                ""
-
-        testCase "ptext \"***\\nfoo\\nbar\" is fail" <| fun _ ->
-            Expect.equal
-                (Result.isError <| FParsecExt.runResult NotesList.Parser.pcontentWithSeparator "***\nfoo\nbar")
-                true
-                ""
-
         testCase "pnote is success" <| fun _ ->
             Expect.equal
-                (FParsecExt.runResult (Note.Parser.parser NotesList.Parser.pcontentWithSeparator) (String.concat "\n" [
+                (FParsecExt.runResult (Note.Parser.parser Note.Parser.prawContent) (String.concat "\n" [
                     "\u200e6 \u200eдекабря \u200e2018 \u200eг., \u200f\u200e14:17:27"
                     "#сюжет"
                     "— А ты мне что скажешь? — нетерпеливо спросил царь."
