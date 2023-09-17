@@ -21,6 +21,7 @@ let all =
     testList "All"
         [
             Shared.Tests.shared
+            Shared.Tests.parserTests
             server
         ]
 

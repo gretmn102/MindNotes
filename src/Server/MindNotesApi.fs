@@ -6,6 +6,7 @@ open Shared.MindNotes.Api
 
 module Parser =
     open FParsec
+
     type 'a Parser = Parser<'a,unit>
 
     let skipSpaces' : _ Parser = skipManySatisfy (isAnyOf " \t")
@@ -20,8 +21,9 @@ module Parser =
         >>= fun x ->
             match System.DateTime.TryParse x with
             | true, x -> preturn x
-            | _ -> failFatally "datetime" // TODO: чем отличается `fail` от `failFatally`?
-    // "10.03.2019 0:35:28"
+            | _ -> fail "datetime"
+
+    /// `10.03.2019 0:35:28`
     let pdatetime : _ Parser =
         pipe4
             (pint32 .>> pchar '.')
@@ -38,45 +40,36 @@ module Parser =
                     let sec = sec |> Option.defaultValue 0
                     System.DateTime(year, month, day, hour, min, sec)
                 | None -> System.DateTime(year, month, day))
+
     let ptext : _ Parser =
         many1Strings
             (
                 notFollowedBy (pstring "***" .>> (skipNewline <|> eof))
                 >>. (many1Satisfy ((<>) '\n') <|> newlineReturn "\n")
             )
-    let textTest () =
-        let test str =
-            match run ptext str with
-            | Success(x, _, _) -> Right x
-            | Failure(x, _, _) -> Left x
-        [
-            test "* one" = Right "* one"
-            test "**sdf" = Right "**sdf"
-            test "***sdf" = Right "***sdf"
-            Either.isLeft (test "***\nsdf\nsdf")
-            test "**\nsdf\n***\nsdf" = Right "**\nsdf\n"
-        ] |> List.forall id
+
     /// Дело в том, что если копировать дату-время файла с вкладки "Свойства" в Window 7, то он вставляет какие-то загадочные Unicode-разделители, выглядит это так: `\u200e6 \u200eдекабря \u200e2018 \u200eг., \u200f\u200e14:17:27`.
     let pdatetimeStrange : _ Parser =
-        let sep = '\u200e' // LEFT-TO-RIGHT MARK
-        let sep2 = '\u200f' // RIGHT-TO-LEFT MARK
-        let iform = System.Globalization.CultureInfo("ru-RU", false)
-        pchar sep
-        >>. many1Strings (many1Satisfy (isNoneOf [sep; sep2; '\n']) <|> charReturn sep "" <|> charReturn sep2 "")
+        let leftToRightMark = '\u200e'
+        let rightToLeftMark = '\u200f'
+        pchar leftToRightMark
+        >>. many1Strings (
+            many1Satisfy (isNoneOf [leftToRightMark; rightToLeftMark; '\n'])
+            <|> charReturn leftToRightMark ""
+            <|> charReturn rightToLeftMark ""
+        )
         >>= fun x ->
             try
-                preturn (System.DateTime.Parse(x, iform))
-            with e ->
-                failFatally e.Message
-    let dateConvert str =
-        match run pdatetimeStrange str with
-        | Success(x, _, _) -> sprintf "%A" x |> Clipboard.setText
-        | Failure(x, _, _) -> failwithf "%s" x
+                let dateTime =
+                    let ruFormatProvider = System.Globalization.CultureInfo("ru-RU", false)
+                    System.DateTime.Parse(x, ruFormatProvider)
 
-    // run pdatetimeStrange "\u200e6 \u200eдекабря \u200e2018 \u200eг., \u200f\u200e14:17:27"
+                preturn dateTime
+            with e ->
+                fail e.Message
+
     let pnote ptext : _ Parser =
         let tags =
-            // run (notFollowedByL (pchar '#' >>. satisfy (isAnyOf " \n")) "# <space|\\n>") "# some"
             let p = pstring "//" >>. skipSpaces'
             (p >>? tags1) <|> (notFollowedBy (pchar '#' >>. satisfy (isAnyOf " \n")) >>. tags1)
             .>> skipNewline
@@ -90,34 +83,24 @@ module Parser =
                   Views = views |> Option.defaultValue 0
                   Tags = tags |> Option.defaultValue []
                   Text = text })
-    let test () =
-        let str =
-            [
-                "\u200e6 \u200eдекабря \u200e2018 \u200eг., \u200f\u200e14:17:27"
-                "#сюжет"
-                "— А ты мне что скажешь? — нетерпеливо спросил царь."
-            ] |> String.concat "\n"
-        run (pnote ptext) str
+
     let start : _ Parser =
         let sep = pstring "***" .>> skipNewline
         optional sep
         >>. sepEndBy1 (pnote ptext) sep
         .>> eof
-    // run (opt (pstring "//" >>. skipSpaces') >>? tags .>> skipNewline) "Настольные игры.\n"
-    // run text "Настольные игры."
+
     let startOnFile path =
         match runParserOnFile start () path System.Text.Encoding.UTF8 with
         | Success(notes, _, _) -> notes
         | Failure(errMsg, _, _) -> failwithf "%s" errMsg
+
     let parseNoteOnFile notePath =
-        match runParserOnFile (spaces >>. pnote (manySatisfy (fun _ -> true))) () notePath System.Text.Encoding.UTF8 with
+        let p =
+            spaces >>. pnote (manySatisfy (fun _ -> true))
+        match runParserOnFile p () notePath System.Text.Encoding.UTF8 with
         | Success(note, _, _) -> Right note
         | Failure(errMsg, _, _) -> Left errMsg
-
-    let test2 notesPath =
-        startOnFile notesPath
-        |> notesPrint
-        |> uncurry System.IO.File.WriteAllText "output\\output.txt"
 
     /// `yyyy-MM-dd_HH-mm-ss`
     let pdateTimeFileFormat: _ Parser =
