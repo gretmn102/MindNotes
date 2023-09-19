@@ -205,11 +205,3 @@ module Note =
             dscr
         else
             sprintf "%s..." dscr.[..length - 1]
-
-let notesPrint =
-    List.map Note.serialize >> String.concat "\n***\n"
-
-let allTags =
-    List.collect (fun x -> x.Tags)
-    >> Set.ofList
-    >> String.concat "\n"
