@@ -252,13 +252,13 @@ let setNote (fullNote:FullNote) =
             let str = MindNotes.Api.Note.serialize fullNote.Note
             sw.Write str
             sw.Close()
-            let x = MarkdownConverter.toMarkdown fullNote.Id fullNote.Note.Text
+            let x = MarkdownConverter.NoteMarkdownContent.deserialize fullNote.Id fullNote.Note.Text
 
             TagsState.updateTags(fullNote.Id, Set.ofList fullNote.Note.Tags)
 
             let res =
                 { fullNote with
-                    Html = x.Result
+                    Html = x.Html
                     Title = x.Title
                     LastWriteTime =
                         System.IO.File.GetLastWriteTime fullNote.Path
@@ -281,14 +281,14 @@ let getNote id =
         if fi.Length > 0L then
             MindNotes.Api.Note.Parser.parseFile path
             |> Either.bind (fun note ->
-                let markdownRender = MarkdownConverter.toMarkdown id note.Text
+                let markdownRender = MarkdownConverter.NoteMarkdownContent.deserialize id note.Text
                 {
                     Id = id
                     Path = path
                     Note =
                         { note with
                             Views = note.Views + 1 }
-                    Html = markdownRender.Result
+                    Html = markdownRender.Html
                     Title = markdownRender.Title
                     LastWriteTime = fi.LastWriteTime
                 }

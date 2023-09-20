@@ -9,11 +9,11 @@ let server =
     testList "MarkdownConverter.toMarkdown" [
         testCase "Title from <h>" <| fun _ ->
             let markdown = "# [sdf*24*](sdf)header"
-            let res = MarkdownConverter.toMarkdown "noteId" markdown
+            let res = MarkdownConverter.NoteMarkdownContent.deserialize "noteId" markdown
             Expect.equal res.Title (Some "sdf24header") "Should be 'sdf24header'"
         testCase "Title from <p>" <| fun _ ->
             let markdown = "Some title"
-            let res = MarkdownConverter.toMarkdown "noteId" markdown
+            let res = MarkdownConverter.NoteMarkdownContent.deserialize "noteId" markdown
             Expect.equal res.Title (Some "Some title") "Should be 'Some title'"
     ]
 

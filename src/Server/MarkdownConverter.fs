@@ -1,131 +1,175 @@
 module MarkdownConverter
 open Markdig
-// Наверное, в будущем лучше перенести его на клиентскую часть
-
 open FsharpMyExtension
 open FsharpMyExtension.Either
-module UrlParse =
-    open FParsec
-    open Shared.MindNotes.Api
 
-    /// `System.DateTime * fragment:string option`
-    let parseInternalUrl str =
-        let sharp =
-            skipChar '#' >>. manySatisfy (fun _ -> true)
-        let p =
-            NoteDateTime.Parser.pdateTimeFileFormat .>> skipString ".md" |>> Some
-            .>>. (optional (skipChar '/')
-                  >>. opt sharp)
-            <|> ((skipChar '/' >>. sharp) <|> sharp |>> fun x -> None, Some x)
+type NoteContentLink =
+    {
+        NoteId: Shared.MindNotes.Api.NoteDateTime option
+        Fragment: string option
+    }
 
-        match run p str with
-        | Success(res, _, _) -> Right res
-        | Failure(errMsg, _, _) -> Left errMsg
-/// `currentNoteId -> markdown -> _`
-let toMarkdown =
-    let pipe = MarkdownPipelineBuilder()
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module NoteContentLink =
+    module Parser =
+        open FParsec
+        open Shared.MindNotes.Api
 
-    // Самое важное (в порядке возрастания):
-    pipe.UseSoftlineBreakAsHardlineBreak() |> ignore
+        let parser : Parser<_, unit> =
+            let pfragment =
+                skipChar '#' >>. manySatisfy (fun _ -> true)
 
-    let opt = Extensions.AutoLinks.AutoLinkOptions()
-    opt.OpenInNewWindow <- true
-    opt.UseHttpsForWWWLinks <- true
-    pipe.UseAutoLinks(opt) |> ignore
+            let pnoteIdAndFragment =
+                pipe2
+                    (NoteDateTime.Parser.pdateTimeFileFormat .>> skipString ".md" |>> Some)
+                    (optional (skipChar '/') >>. opt pfragment)
+                    (fun noteId fragment ->
+                        {
+                            NoteId = noteId
+                            Fragment = fragment
+                        }
+                    )
 
-    pipe.UseCitations() |> ignore
-    pipe.UseFigures() |> ignore
-    pipe.UseFooters() |> ignore
+            let pfragmentOnly =
+                (skipChar '/' >>. pfragment) <|> pfragment
+                |>> fun fragment ->
+                    {
+                        NoteId = None
+                        Fragment = Some fragment
+                    }
 
-    pipe.UseFootnotes() |> ignore
+            pnoteIdAndFragment <|> pfragmentOnly
 
-    pipe.UseAutoIdentifiers(Extensions.AutoIdentifiers.AutoIdentifierOptions.AutoLink) |> ignore
+    let toUrl currentNoteId rawUrl =
+        FParsecExt.runEither Parser.parser rawUrl
+        |> Either.map (fun internalLink ->
+            let noteId =
+                match internalLink.NoteId with
+                | Some noteId ->
+                    Shared.MindNotes.Api.NoteDateTime.serialize noteId
+                | None ->
+                    currentNoteId
 
-    pipe.UseMediaLinks() |> ignore
+            let fragment =
+                match internalLink.Fragment with
+                | Some fragment -> "/#" + fragment.Replace("%20", "-")
+                | None -> ""
 
-    pipe.UsePipeTables() |> ignore
+            // TODO: refact: use `note` route from client side
+            sprintf "#/note/%s%s" noteId fragment
+        )
 
-    pipe.UseGenericAttributes() |> ignore
+type NoteMarkdownContent =
+    {
+        Title: string option
+        Html: string
+    }
 
-    pipe.UseEmphasisExtras() |> ignore // for ~~strike~~
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module NoteMarkdownContent =
+    let getTitle (markdownDocument: Syntax.MarkdownDocument) =
+        let toString (containerInline: Syntax.Inlines.ContainerInline)=
+            containerInline
+            |> Seq.map (function
+                | :? Syntax.Inlines.LinkInline as x ->
+                    x
+                    |> Seq.map (function
+                        | :? Syntax.Inlines.EmphasisInline as x ->
+                            x.FirstChild.ToString()
+                        | x -> x.ToString()
+                    )
+                    |> String.concat ""
+                | x -> x.ToString()
+            )
+            |> String.concat ""
 
-    let pipe = pipe.Build()
-    fun currentNoteId markdown ->
-        // let reader = "sdf*sdg* *[](https://www.youtube.com/watch?v=ss0-HGGh9Yo)*"
-        use writer = new System.IO.StringWriter()
-        let render = Renderers.HtmlRenderer(writer)
-        pipe.Setup(render)
+        let rec getTitle (blocks: Syntax.Block list) =
+            match blocks with
+            | (:? Syntax.ParagraphBlock as x)::_ ->
+                x.Inline
+                |> toString
+                |> Some
+            | (:? Syntax.HeadingBlock as x)::_ ->
+                x.Inline
+                |> toString
+                |> Some
+            | _::xs -> getTitle xs
+            | [] -> None
 
-        let markdig = Markdig.Markdown.Parse(markdown, pipe)
+        markdownDocument
+        |> List.ofSeq
+        |> getTitle
 
-        let rec f (markdig:Syntax.Block seq) =
-            markdig
-            |> Seq.iter (function
-                | :? Syntax.LeafBlock as y ->
-                    let rec f (xs:seq<Syntax.Inlines.Inline>) =
-                        xs
-                        |> Seq.iter (
-                            function
-                            | :? Syntax.Inlines.LinkInline as x ->
-                                match UrlParse.parseInternalUrl x.Url with
-                                | Left _ ->
-                                    ()
-                                | Right (res, chapter) ->
-                                    let chapter =
-                                        match chapter with
-                                        | Some chapter -> "/#" + chapter.Replace("%20", "-")
-                                        | None -> ""
-                                    let res =
-                                        match res with
-                                        | Some res -> Shared.MindNotes.Api.NoteDateTime.serialize res
-                                        | None -> currentNoteId
-                                    x.Url <-
-                                        sprintf "#/note/%s%s"
-                                            res
-                                            chapter
-                            | :? Syntax.Inlines.ContainerInline as x ->
-                                f x
-                            | x -> ()
-                        )
-                    match y.Inline with
-                    | null -> ()
-                    | x -> f x
-                | :? Syntax.ContainerBlock as x ->
-                    f x
+    let convertNoteContentLinkToUrls currentNoteId (markdownDocument: Syntax.MarkdownDocument) =
+        let rec mapInlines (inlines: Syntax.Inlines.Inline seq) =
+            inlines
+            |> Seq.iter (
+                function
+                | :? Syntax.Inlines.LinkInline as linkInline ->
+                    NoteContentLink.toUrl currentNoteId linkInline.Url
+                    |> Either.iter (fun resultUrl ->
+                        linkInline.Url <- resultUrl
+                    )
+                | :? Syntax.Inlines.ContainerInline as containerInline ->
+                    mapInlines containerInline
                 | _ -> ()
             )
-        f markdig
 
-        let getTitle () =
-            let toString (xs:Syntax.Inlines.ContainerInline)=
-                xs
-                |> Seq.map (function
-                    | :? Syntax.Inlines.LinkInline as x ->
-                        x
-                        |> Seq.map (function
-                            | :? Syntax.Inlines.EmphasisInline as x ->
-                                x.FirstChild.ToString()
-                            | x -> x.ToString()
-                        )
-                        |> String.concat ""
-                    | x -> x.ToString()
-                    )
-                |> String.concat ""
+        let mapLeafBlock (leafBlock : Syntax.LeafBlock) =
+            match leafBlock.Inline with
+            | null -> ()
+            | x -> mapInlines x
 
-            let rec getTitle (xs:Syntax.Block list) =
-                match xs with
-                | (:? Syntax.ParagraphBlock as x)::_ ->
-                    Some (x.Inline |> toString)
-                | (:? Syntax.HeadingBlock as x)::_ ->
-                    x.Inline
-                    |> toString
-                    |> Some
-                | _::xs -> getTitle xs
-                | [] -> None
-            markdig |> List.ofSeq
-            |> getTitle
+        let rec mapBlocks (blocks: Syntax.Block seq) =
+            blocks
+            |> Seq.iter (function
+                | :? Syntax.LeafBlock as leafBlock ->
+                    mapLeafBlock leafBlock
+                | :? Syntax.ContainerBlock as x ->
+                    mapBlocks x
+                | _ -> ()
+            )
 
-        {|
-            Title = getTitle ()
-            Result = render.Render(markdig) |> fun x -> x.ToString()
-        |}
+        mapBlocks markdownDocument
+
+    let private markdownPipeline =
+        let pipe = MarkdownPipelineBuilder()
+
+        pipe.UseSoftlineBreakAsHardlineBreak() |> ignore
+
+        let opt = Extensions.AutoLinks.AutoLinkOptions()
+        opt.OpenInNewWindow <- true
+        opt.UseHttpsForWWWLinks <- true
+        pipe.UseAutoLinks(opt) |> ignore
+
+        pipe.UseCitations() |> ignore
+        pipe.UseFigures() |> ignore
+        pipe.UseFooters() |> ignore
+
+        pipe.UseFootnotes() |> ignore
+
+        pipe.UseAutoIdentifiers(Extensions.AutoIdentifiers.AutoIdentifierOptions.AutoLink) |> ignore
+
+        pipe.UseMediaLinks() |> ignore
+
+        pipe.UsePipeTables() |> ignore
+
+        pipe.UseGenericAttributes() |> ignore
+
+        pipe.UseEmphasisExtras() |> ignore // for ~~strike~~
+
+        pipe.Build()
+
+    let deserialize currentNoteId rawMarkdown : NoteMarkdownContent =
+        let document = Markdig.Markdown.Parse(rawMarkdown, markdownPipeline)
+        convertNoteContentLinkToUrls currentNoteId document
+
+        {
+            Title = getTitle document
+            Html =
+                use writer = new System.IO.StringWriter()
+                let render = Renderers.HtmlRenderer(writer)
+                render.Render(document).ToString()
+        }
