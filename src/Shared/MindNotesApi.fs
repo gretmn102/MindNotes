@@ -37,6 +37,17 @@ module Tag =
 type TagsList = Tag list
 
 module TagsList =
+    let filter predicate (tagsList: TagsList) : TagsList =
+        tagsList
+        |> List.filter predicate
+
+    let remove tag (tagsList: TagsList) : TagsList =
+        tagsList
+        |> List.filter ((<>) tag)
+
+    let add tag (tagsList: TagsList) : TagsList =
+        tag::tagsList
+
     module Parser =
         #if FABLE_COMPILER
         open FUniversalParser.Primitives
