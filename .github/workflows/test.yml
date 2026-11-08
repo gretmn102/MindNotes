@@ -18,5 +18,5 @@ jobs:
         run: dotnet tool restore
       - name: Paket install
         run: dotnet paket install
-      - name: Test
-        run: dotnet fsi build.fsx -t TestsRun
+      - name: Test server
+        run: dotnet fake build -t ServerTestsRun # Shared тестируется вместе с ним зачем-то
