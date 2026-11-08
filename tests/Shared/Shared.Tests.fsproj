@@ -3,6 +3,7 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Note.Tests.fs" />
     <Compile Include="Shared.Tests.fs" />
   </ItemGroup>
   <ItemGroup>
