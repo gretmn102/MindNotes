@@ -1,0 +1,22 @@
+name: .NET
+
+on:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.x.x
+      - name: Restore
+        run: dotnet tool restore
+      - name: Paket install
+        run: dotnet paket install
+      - name: Test
+        run: dotnet fsi build.fsx -t TestsRun
