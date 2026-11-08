@@ -14,20 +14,20 @@ group Client
     nuget Fable.Core = 4.0
     nuget Fable.Elmish = 4.0.2
     nuget Fable.Elmish.React = 4.0
-    nuget Fable.Elmish.Debugger
-    nuget Fable.Elmish.HMR
+    nuget Fable.Elmish.Debugger >= 4.0 lowest_matching: true
+    nuget Fable.Elmish.HMR >= 7.0 lowest_matching: true
     nuget Fable.FontAwesome.Free = 3.0
     nuget Fable.React = 9.3
     nuget Fable.Remoting.Client = 7.25.0
     nuget Fulma = 3.0
-    nuget Fulma.Extensions.Wikiki.Checkradio
+    nuget Fulma.Extensions.Wikiki.Checkradio >= 3.0 lowest_matching: true
     nuget Feliz = 2.6
-    nuget Feliz.Router
-    nuget Fable.Browser.Navigator
+    nuget Feliz.Router >= 4.0 lowest_matching: true
+    nuget Fable.Browser.Navigator >= 2.4 lowest_matching: true
     nuget Zanaptak.TypedCssClasses = 1.0
 
     source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
-    nuget FulmaExtensions
+    nuget FulmaExtensions  >= 0.1 lowest_matching: true
 
 group ClientTests
     strategy: min
@@ -48,7 +48,7 @@ group Shared
 
     source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
     nuget FSharpMyExt 2.0.0-prerelease.4
-    nuget FUniversalParser
+    nuget FUniversalParser >= 0.5 lowest_matching: true
 
 group Server
     strategy: min
@@ -60,7 +60,7 @@ group Server
     nuget Fable.Remoting.Giraffe = 4.9
     nuget Markdig = 0.22.1
     nuget Saturn = 0.14.1
-    nuget StringComparison
+    nuget StringComparison >= 1.0.3 lowest_matching: true
 
     source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
     nuget FSharpMyExt 2.0.0-prerelease.4
